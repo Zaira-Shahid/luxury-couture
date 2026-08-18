@@ -94,7 +94,7 @@ export default async function ProductDetailPage({
           </div>
 
           <div className="mt-8">
-            <CustomizeTeaser />
+            <CustomizeTeaser productSlug={product.slug} />
           </div>
 
           <div className="mt-8">

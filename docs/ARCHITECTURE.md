@@ -152,6 +152,41 @@ Quick reference for how this codebase is organized. For the full product roadmap
   object directly (`formData.set("images", JSON.stringify(...))`) inside the submit handler,
   rather than trying to keep a hidden `<input>` in sync.
 
+## Custom Lehenga Builder (Module 6)
+
+- **A second real security bug, this one self-documented by the schema.** `builder_configurations`'
+  own migration comment (0003, Module 1) predicted this: *"Guest configurations are addressable
+  only by their share_token in practice — discoverable via row scan here... Module 6 will tighten
+  guest ownership before shipping."* Confirmed live before fixing: a guest builder draft (including
+  its own `share_token`) created from one anonymous session was fully readable — via a plain
+  `select *`, no token needed — from a completely unrelated anonymous session. `inspiration_images`
+  had the identical pattern in its SELECT policy. Fixed in `0022`.
+- **Why this fix needed RPCs, not just a tighter RLS policy.** Postgres RLS restricts *which rows a
+  role can see*, but can't verify *that the caller supplied the correct secret token* — a policy
+  permitting "guest rows" can't distinguish "knows the token" from "blind scan." `0022` locks
+  `builder_configurations`/`inspiration_images` SELECT down to owner-or-admin only, and adds
+  `SECURITY DEFINER` RPCs (`create_builder_configuration`, `get_builder_configuration`,
+  `update_builder_configuration`, `claim_builder_configuration`, `add_/remove_inspiration_image`,
+  plus `get_inspiration_images` added in `0023` after the first pass missed it) that require the
+  exact `id` *and* `share_token` together. This is the standard, correct pattern for "shareable by
+  secret link" in Postgres — verified live end-to-end with `scripts/test-builder-rpcs.mjs`,
+  including that a signed-in owner falls back to normal RLS (no token needed) once they've claimed
+  a design, and that an unrelated stranger still can't read it either way.
+- **Price is never client-supplied, structurally, not just by convention.** None of the RPCs even
+  accept a price parameter — `compute_builder_estimated_price()` always recomputes it server-side
+  from the current `price_adjustment` values on the referenced option rows. `estimated_price` is
+  explicitly non-authoritative either way (see the 0003 comment) — the real price is
+  `quotations.quoted_price`, admin-set, created after "Request Quotation" lands an `enquiries` row
+  (`type: 'builder'`) for Module 9 to act on.
+- **The id+token URL *is* the save/continue/share mechanism** — no separate cookie or session
+  needed. `create_builder_configuration` returns the new row; the client immediately
+  `router.replace`s to `/builder/[id]?token=[share_token]`. Reloading, bookmarking, or sharing that
+  URL are the same action. Signing in while on it surfaces a "claim" prompt
+  (`claim_builder_configuration` — requires `auth.uid()`, only claims a still-unclaimed row).
+- Scoped out, matching established precedent: inspiration images are URL-paste (Module 8 owns real
+  upload); admin editing of `price_adjustment` values is Module 17's; "Request Quotation" only
+  creates the `enquiries` row — admin review/response is Module 9's.
+
 ## `lib/` layering
 
 - `lib/supabase/` — the only place Supabase clients are constructed. `client.ts` for Client
