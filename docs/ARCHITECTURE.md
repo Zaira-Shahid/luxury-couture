@@ -110,6 +110,48 @@ Quick reference for how this codebase is organized. For the full product roadmap
   newsletters**: any insert-only-public/admin-only-read table (see `analytics_events`, Module 1)
   must avoid `.select()` and `.upsert()` on the anon/authenticated path for the same reason.
 
+## Product & collection management (Module 5)
+
+- Storefront: `/products`, `/products/[slug]`, `/collections`, `/collections/[slug]` —
+  public reads via `lib/catalog/get-products.ts` / `get-collections.ts` / `get-categories.ts`,
+  all request-cached (`React.cache`) like the Module 3/4 fetchers.
+- **Real security bug found and fixed before building on top of this table:** `enquiries`'
+  SELECT policy (0006, Module 1) was
+  `using (customer_id = auth.uid() or customer_id is null or public.is_admin())`. The
+  `customer_id is null` clause was meant to let a guest read back their own submission, but
+  there's no way to scope "their own" for an anonymous Postgres role — it actually let **any**
+  anonymous visitor read **every** guest-submitted enquiry (name, email, phone, message).
+  Confirmed live before fixing: submitted a guest enquiry from one anonymous session, read it
+  back in full from a completely unrelated one. Fixed in `0021` by dropping that clause; guests
+  can still insert, only the submitter-if-signed-in or an admin can read a row back.
+- **Admin CRUD scope, drawn explicitly against two later modules:** Module 16 ("Admin Dashboard
+  Foundation") owns the polished dashboard shell/full nav — `components/admin/admin-nav.tsx` is
+  deliberately minimal (just the sections that exist today) and gets wrapped/upgraded later.
+  Module 17 ("Admin Product, Builder & Inventory Management") owns builder-option editing
+  (fabrics/colours/embroidery as admin-editable records), builder pricing, and inventory —
+  Module 5's admin pages stop at product/collection/category CRUD. Module 8 ("Inspiration
+  Upload & Media Management") owns Supabase Storage; product/collection images stay URL-paste,
+  same precedent as the Module 3 logo.
+- The product detail page's "Customize This Piece" section shows the *global* seeded builder
+  lookup options (fabrics/colours/embroidery) as a teaser linking to the Custom Builder (Module
+  6) — there's no per-product variant-restriction table in the schema, and inventing one wasn't
+  asked for.
+- Admin CRUD actions (`features/admin-catalog/actions.ts`) use the regular SSR client, not
+  `lib/supabase/admin.ts` — the existing `is_admin()` RLS policies already grant exactly the
+  needed access for a real authenticated admin, so bypassing RLS with the service-role client
+  would be an unnecessary privilege escalation, not a simplification. Note: the `(admin)` layout
+  gate allows `admin`/`staff`/`production` roles (see Module 2), but these RLS policies allow
+  writes for `role = 'admin'` only — a `staff`/`production` account could reach `/admin/products`
+  but would get a generic write failure on submit. Fine-grained per-role admin permissions are
+  explicitly Module 26 ("Admin Roles & Permissions") — not fixed here.
+- Repeatable form data (product images, a collection's linked products) uses two different
+  patterns depending on shape: a *fixed* checklist (collection→product links) uses plain
+  `<input name="productIds" value={id}>` checkboxes, read server-side with
+  `formData.getAll("productIds")` — no client state needed. A *dynamic, add/remove* list (product
+  images) is lifted into React state in the form component, then serialized into the `FormData`
+  object directly (`formData.set("images", JSON.stringify(...))`) inside the submit handler,
+  rather than trying to keep a hidden `<input>` in sync.
+
 ## `lib/` layering
 
 - `lib/supabase/` — the only place Supabase clients are constructed. `client.ts` for Client
