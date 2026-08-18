@@ -38,6 +38,9 @@ export type SiteSettings = {
   homepage: {
     seoTitle: string | null;
     seoDescription: string | null;
+    heroHeading: string | null;
+    heroSubheading: string | null;
+    heroImageUrl: string | null;
   };
 };
 
@@ -54,5 +57,11 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
     footerText: null,
   },
   seo: { defaultTitle: null, defaultDescription: null, defaultOgImageUrl: null },
-  homepage: { seoTitle: null, seoDescription: null },
+  homepage: {
+    seoTitle: null,
+    seoDescription: null,
+    heroHeading: null,
+    heroSubheading: null,
+    heroImageUrl: null,
+  },
 };

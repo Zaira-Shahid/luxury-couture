@@ -58,6 +58,15 @@ function applyRow(settings: SiteSettings, row: Row) {
     case "homepage.seo_description":
       settings.homepage.seoDescription = typeof row.value === "string" ? row.value : null;
       break;
+    case "homepage.hero_heading":
+      settings.homepage.heroHeading = typeof row.value === "string" ? row.value : null;
+      break;
+    case "homepage.hero_subheading":
+      settings.homepage.heroSubheading = typeof row.value === "string" ? row.value : null;
+      break;
+    case "homepage.hero_image_url":
+      settings.homepage.heroImageUrl = typeof row.value === "string" ? row.value : null;
+      break;
     default:
       // Unrecognized keys (future modules, typos) are ignored rather than
       // breaking the whole settings fetch.

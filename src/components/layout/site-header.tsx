@@ -28,8 +28,11 @@ export async function SiteHeader() {
             )}
           </Link>
           <nav className="hidden items-center gap-6 text-sm text-muted-foreground sm:flex">
-            <Link href="/" className="transition-colors hover:text-foreground">
-              Home
+            <Link href="/collections" className="transition-colors hover:text-foreground">
+              Collections
+            </Link>
+            <Link href="/builder" className="transition-colors hover:text-foreground">
+              Design Your Own
             </Link>
             {user ? (
               <Link href="/account" className="transition-colors hover:text-foreground">

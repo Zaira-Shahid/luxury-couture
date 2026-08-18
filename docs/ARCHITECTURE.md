@@ -76,6 +76,40 @@ Quick reference for how this codebase is organized. For the full product roadmap
   25 scope). The header renders the logo with a plain `<img>`, not `next/image`, since the URL is
   an arbitrary admin-supplied host that isn't in `next.config`'s remote-pattern allowlist.
 
+## Storefront & animations (Module 4)
+
+- `src/app/(storefront)/page.tsx` composes the homepage from
+  `src/components/storefront/*` sections. `products`, `collections`, and `reviews` all have zero
+  rows today (real catalog content is Module 31's job) — every data-driven section
+  (`featured-collections`, `featured-products`, `testimonials`) queries the real, empty tables and
+  renders `null` when empty, rather than showing an awkward empty state to real visitors. Verify
+  with `scripts/test-homepage-render.mjs`, which writes temporary featured content + a real
+  reviewer account via the service-role/admin API, confirms it renders, then deletes everything.
+- `src/components/motion/scroll-reveal.tsx` / `page-transition.tsx` — the shared animation
+  primitives (`whileInView` reveal, a light route fade-in) reused across sections instead of
+  duplicating `framer-motion` boilerplate per component. Page transitions are deliberately a
+  simple fade, not a full `AnimatePresence` exit/enter system, given this module's own "must
+  remain performant" requirement.
+- Buttons that render as links use Base UI's `render` prop (`<Button render={<Link href="..." />}>`),
+  **not** Radix's `asChild` — this project's `Button` wraps `@base-ui/react/button`, which has no
+  `asChild` prop at all; using it silently drops the link semantics rather than erroring.
+- Admin-supplied image URLs (collection covers, product images, hero image) render via plain
+  `<img>`, not `next/image`, for the same unconfigured-remote-host reason as the Module 3 logo.
+- `newsletter_subscribers` (`0020`, Module 4) is a minimal capture-only table (email, source,
+  subscribed_at) — Module 19 ("Marketing & Customer Retention") owns the full campaign/segment
+  architecture later. **Found while verifying this module:** `subscribeToNewsletter` originally
+  used `.upsert(..., { ignoreDuplicates: true })` to make re-signups idempotent, but that failed
+  RLS for every anonymous caller — even brand-new emails. Root cause, confirmed against the actual
+  `@supabase/postgrest-js` source: `.upsert()` always needs a `RETURNING` row internally (to report
+  insert-vs-update status), *regardless of the client's return preference*, unlike plain
+  `.insert()`, which truly skips `RETURNING` when `.select()` isn't chained. Since
+  `newsletter_subscribers`' SELECT policy is admin-only, `RETURNING` always failed the same way
+  `.insert().select()` would. Fixed by using plain `.insert()` and treating a `23505` (unique
+  violation — duplicate email) as success rather than an error, since "already subscribed" is the
+  correct outcome for a repeat signup anyway. **This is a general pattern, not specific to
+  newsletters**: any insert-only-public/admin-only-read table (see `analytics_events`, Module 1)
+  must avoid `.select()` and `.upsert()` on the anon/authenticated path for the same reason.
+
 ## `lib/` layering
 
 - `lib/supabase/` — the only place Supabase clients are constructed. `client.ts` for Client
