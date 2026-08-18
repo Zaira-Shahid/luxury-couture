@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { getCustomizeTeaserOptions } from "@/lib/catalog/get-builder-options";
 
-export async function CustomizeTeaser() {
+export async function CustomizeTeaser({ productSlug }: { productSlug?: string } = {}) {
   const { fabrics, embroidery, colours } = await getCustomizeTeaserOptions();
   if (fabrics.length === 0 && embroidery.length === 0 && colours.length === 0) return null;
 
@@ -43,7 +43,10 @@ export async function CustomizeTeaser() {
           </div>
         ) : null}
       </div>
-      <Button render={<Link href="/builder" />} className="mt-4">
+      <Button
+        render={<Link href={productSlug ? `/builder?product=${productSlug}` : "/builder"} />}
+        className="mt-4"
+      >
         Open Custom Builder
       </Button>
     </div>
