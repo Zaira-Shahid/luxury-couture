@@ -32,6 +32,10 @@ first):
 0012_analytics_audit_settings.sql
 0013_seed_data.sql
 0014_grants.sql
+0015_service_role_grants.sql
+0016_restore_profiles_role_column_protection.sql
+0017_enforce_role_change_via_trigger.sql
+0018_fix_role_change_trigger_security.sql
 ```
 
 The order matters — each file's foreign keys reference tables created by earlier files. If a
@@ -44,6 +48,18 @@ before RLS ever gets a chance to run (RLS policies only take effect once the rol
 the underlying GRANT). Discovered by actually testing the anon key against the live database, not
 by reading the SQL — see the file's own comments for detail.
 
+`0015_service_role_grants.sql` is the same fix, for `service_role` — `BYPASSRLS` and Postgres
+table `GRANT`s are separate layers; bypassing RLS doesn't imply an implicit grant. Surfaced when
+`src/lib/supabase/admin.ts`-style service-role queries hit the same `permission denied` error.
+
+`0016`–`0018` fix a genuine privilege-escalation bug found while verifying Module 2 (a signed-in
+customer could set their own `role` to `admin`): a column-level `REVOKE` (0001) cannot restrict a
+broader table-level `GRANT UPDATE` (0014) once one exists — Postgres column privileges are
+additive, not restrictive. The real fix is a trigger (`0017`), and `0018` fixes that trigger's
+first version, which used `SECURITY DEFINER` and so read `current_user` as the function's *owner*
+(`postgres`) rather than the actual caller, silently defeating its own check. Both were caught by
+`scripts/verify-cross-user.mjs`, not by reading the SQL.
+
 ## Verifying it worked
 
 Run `node --env-file=.env.local scripts/verify-db.mjs` to confirm the table count, seed data row
@@ -53,6 +69,14 @@ Run `node --env-file=.env.local scripts/verify-rls.mjs` to confirm RLS is actual
 it queries the live database with the anon key (not service-role) for 8 real scenarios: public
 reads succeed, owner/admin-only tables come back empty (not an error) for an anonymous caller,
 and an anonymous write is rejected.
+
+Run `node --env-file=.env.local scripts/verify-cross-user.mjs` to confirm ownership/role
+enforcement between two real, signed-in users (created via the admin API, not the public signup
+flow, so this doesn't touch Supabase's rate-limited auth email sender): a customer can edit their
+own profile/addresses, cannot see or edit another customer's, and cannot self-promote their own
+`role`. It cleans up both test users on success; if it's interrupted partway through, run
+`node --env-file=.env.local scripts/cleanup-test-users.mjs` to remove any leftover
+`@luxury-couture-devtest.local` test accounts.
 
 Or manually, in the SQL Editor, confirm you see all 46 tables listed (45 domain tables +
 `schema_migrations`):

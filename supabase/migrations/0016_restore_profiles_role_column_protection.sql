@@ -1,0 +1,14 @@
+-- Module 2 fix: restore the profiles.role column-level protection that
+-- 0014_grants.sql accidentally undid.
+--
+-- Discovered via scripts/verify-cross-user.mjs: a signed-in customer could
+-- set their own role to 'admin' via a normal PostgREST update call.
+-- 0001_profiles_and_addresses.sql deliberately revoked UPDATE on the role
+-- column from `authenticated` so customers can edit their own profile but
+-- never self-promote. 0014_grants.sql then ran a blanket
+-- `grant update on all tables in schema public to anon, authenticated`
+-- (needed to fix the separate missing-base-grants bug) — a table-level
+-- UPDATE grant re-grants every column, including ones an earlier
+-- column-level REVOKE had already carved out. Re-applying the column
+-- revoke here, after 0014, is what makes it stick.
+revoke update (role) on public.profiles from authenticated;
