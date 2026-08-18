@@ -49,6 +49,33 @@ Quick reference for how this codebase is organized. For the full product roadmap
   inside a `SECURITY DEFINER` function, `current_user` resolves to the function's *owner*, not
   the actual caller, which silently defeated the first version of this check.
 
+## Settings (Module 3)
+
+- `site_settings` (`key text primary key, value jsonb`, from Module 1) is the single
+  admin-configurable config store, using namespaced keys (`theme.primary`, `branding.logo_url`,
+  `store.announcement_text`, `seo.default_title`, …) — see `src/lib/settings/types.ts` for the
+  full shape and `get-site-settings.ts` for the key→field mapping. It has zero rows today (no
+  admin editing UI exists yet — see below), so every field falls through to
+  `DEFAULT_SITE_SETTINGS`, which the app must render correctly on its own.
+- `getSiteSettings()` (`lib/settings/get-site-settings.ts`) fetches all rows once per request
+  (`React.cache`) and merges them over the defaults into one typed object, used by the root
+  layout (brand-color CSS var overrides, SEO metadata) and `SiteHeader`/`SiteFooter`
+  (logo/announcement bar/social/contact/footer text).
+- **Found while building this module:** `site_settings`'s only RLS policy (0012, Module 1) was
+  `for all using (is_admin())` — anonymous visitors couldn't read it at all, which breaks the
+  entire point of this module. Fixed with an additional public SELECT policy
+  (`0019_site_settings_public_read.sql`); writes are still admin-only.
+- **No admin editing UI yet** — this module builds the read/render side only. An admin can only
+  change these values today via direct SQL/service-role writes; the actual settings-editing UI is
+  Module 25 ("Admin Settings & Business Configuration").
+- **Scoped deliberately out of this module:** admin-configurable *font family* (would need dynamic
+  Google Font loading; `next/font` requires static imports at build time, so this isn't practical
+  without a much bigger font-loading system — font choice stays developer-set) and logo/favicon
+  *upload* (no Supabase Storage bucket exists yet; `branding.logo_url`/`favicon_url` are plain URL
+  strings an admin can point at any externally-hosted image — self-serve upload is natural Module
+  25 scope). The header renders the logo with a plain `<img>`, not `next/image`, since the URL is
+  an arbitrary admin-supplied host that isn't in `next.config`'s remote-pattern allowlist.
+
 ## `lib/` layering
 
 - `lib/supabase/` — the only place Supabase clients are constructed. `client.ts` for Client
@@ -56,11 +83,11 @@ Quick reference for how this codebase is organized. For the full product roadmap
   and route-protection helper used by `src/middleware.ts`, `admin.ts` for the service-role client
   (server-only, never imported by client code).
 - `lib/auth/` — server-only session/profile helpers built on top of `lib/supabase/server.ts`.
+- `lib/settings/` — server-only site-settings fetch/merge layer (see above).
 - `lib/validations/` — zod schemas, one file per feature area (`auth.ts`, `customers.ts`, …),
   shared between Server Actions and (where useful) client-side form checks.
-- `lib/config/` — centralized, typed config (brand name, description, URL) so components never
-  hardcode brand strings. Values here are developer defaults until Admin-configurable settings
-  ship in Module 3/25.
+- `lib/config/` — centralized, typed config (brand name, description, URL) — the fallback layer
+  underneath `lib/settings/`, used directly wherever Supabase-backed settings aren't relevant.
 - `lib/logger.ts` — thin logging wrapper so server code never leaks raw errors to the client;
   swap the implementation for a real provider later without touching call sites.
 
@@ -81,7 +108,11 @@ modules (11, 15, 14, 22) — nothing is implemented yet.
 
 ## Theming
 
-All colors, radii, and fonts are CSS variables defined in `src/app/globals.css` and mapped into
-Tailwind's theme in `tailwind.config.ts` — components should always use the semantic Tailwind
-classes (`bg-primary`, `text-muted-foreground`, etc.), never raw color values, so the palette can
-become Admin-configurable later without touching component code.
+All colors, radii, and fonts are CSS variables defined in `src/app/globals.css`'s `:root`/`.dark`
+blocks and mapped into Tailwind's theme via the `@theme inline` block in the same file (Tailwind
+v4 is CSS-first — there's no `tailwind.config.ts`). Components should always use the semantic
+Tailwind classes (`bg-primary`, `text-muted-foreground`, etc.), never raw color values.
+
+`--primary`/`--accent` specifically can be overridden at runtime: the root layout sets them as
+inline styles on `<html>` from `getSiteSettings()` when an admin value exists, layering on top of
+(not replacing) the `:root` developer defaults — see the Settings section above.
