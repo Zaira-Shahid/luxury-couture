@@ -173,6 +173,7 @@ export interface MeasurementProfile {
   unit: MeasurementUnit;
   status: MeasurementProfileStatus;
   notes: string | null;
+  admin_notes: string | null;
   created_at: ISODateTime;
   updated_at: ISODateTime;
 }
@@ -183,6 +184,21 @@ export interface Measurement {
   field_key: string;
   value: number;
   created_at: ISODateTime;
+}
+
+export interface MeasurementFieldDefinition {
+  id: UUID;
+  key: string;
+  label: string;
+  category: string;
+  description: string | null;
+  guide_image_url: string | null;
+  guide_video_url: string | null;
+  is_required: boolean;
+  is_active: boolean;
+  sort_order: number;
+  created_at: ISODateTime;
+  updated_at: ISODateTime;
 }
 
 // ---- Wishlist & cart ---------------------------------------------------
