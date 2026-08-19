@@ -187,6 +187,37 @@ Quick reference for how this codebase is organized. For the full product roadmap
   upload); admin editing of `price_adjustment` values is Module 17's; "Request Quotation" only
   creates the `enquiries` row — admin review/response is Module 9's.
 
+## Measurement System (Module 7)
+
+- **A real gap, not a bug — the schema's own comment predicted this one too.** `measurements`
+  (0004, Module 1) stores fields as free-text `field_key`/`value` rows specifically *"because
+  Module 7 requires admin-configurable measurement fields — fixed columns would fight that,"* but
+  nothing defined what fields actually existed. `measurement_field_definitions` (`0024`) is that
+  catalog — key, label, category, description, guide image/video, required flag — same public-read/
+  admin-write shape as fabrics/colours. Seeded with 13 real fields across three categories (Upper
+  Body, Waist & Hips, Lengths); without this the measurement system had literally nothing to
+  measure.
+- No guest-access leak risk here, unlike Modules 5–6: `measurement_profiles.customer_id` is
+  `not null` — there's no anonymous path to begin with, so the owner-or-admin RLS from Module 1 was
+  already correct as written. Verified with `scripts/test-measurements.mjs` (11 checks: create,
+  DB-level rejection of a non-positive value, cross-customer isolation via a real third account,
+  admin approve, edit-after-approval resetting status to draft, correction-request setting
+  `admin_notes` without touching the customer's own `notes`).
+- `admin_notes` (new column on `measurement_profiles`, `0024`) is deliberately separate from the
+  existing customer-facing `notes` — a single shared field would mean an admin's "please remeasure
+  your waist" gets silently overwritten the next time the customer saves their own notes.
+- Editing a `submitted`/`approved` profile resets its status to `draft` (in `saveProfile`,
+  `features/measurements/actions.ts`) — previously-approved data that's since changed is no longer
+  validly approved; this is application logic, not an RLS rule, since RLS has no concept of "was
+  this value true a moment ago."
+- "Images/video support" is the measurement *guide*'s per-field media (`guide_image_url`,
+  `guide_video_url` as a plain embed link) — not customer-uploaded verification photos, which
+  would need Module 8's Storage and isn't what "build the measurement system" asked for.
+  "Attach measurement version to order" is explicitly not built here: `orders.measurement_profile_id`
+  already exists as a plain FK from Module 1, but whether that should snapshot values immutably at
+  order time or just reference the live profile is a real design decision for whichever of Modules
+  10–12 actually creates orders — guessing at it now would be scope creep in the wrong direction.
+
 ## `lib/` layering
 
 - `lib/supabase/` — the only place Supabase clients are constructed. `client.ts` for Client
