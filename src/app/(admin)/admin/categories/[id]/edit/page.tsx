@@ -22,7 +22,11 @@ export default async function EditCategoryPage({
   return (
     <div className="container max-w-2xl py-10">
       <h1 className="mb-6 font-heading text-2xl">Edit Category</h1>
-      <CategoryForm category={category as Category} action={updateCategory.bind(null, id)} />
+      <CategoryForm
+        key={`${category.id}-${category.updated_at}`}
+        category={category as Category}
+        action={updateCategory.bind(null, id)}
+      />
     </div>
   );
 }

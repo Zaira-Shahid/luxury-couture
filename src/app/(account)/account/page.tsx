@@ -18,7 +18,7 @@ export default async function ProfilePage() {
         <CardDescription>{user.email}</CardDescription>
       </CardHeader>
       <CardContent>
-        <ProfileForm profile={profile} />
+        <ProfileForm key={`${profile.id}-${profile.updated_at}`} profile={profile} />
       </CardContent>
     </Card>
   );
