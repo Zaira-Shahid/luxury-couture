@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAdminOrderDetail } from "@/lib/orders/get-orders";
 
 import { PaymentRowActions } from "../../payments/payment-row-actions";
+import { CreateShipmentButton } from "./create-shipment-button";
 import { OrderNotes } from "./order-notes";
 import { OrderStatusForm } from "./order-status-form";
 import { SendMessageForm } from "./send-message-form";
@@ -173,12 +175,23 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
             {shipping ? (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Shipping status</span>
-                <span>
+                <Link href={`/admin/shipping/${shipping.id}`} className="hover:underline">
                   {shipping.status}
                   {shipping.tracking_number ? ` · ${shipping.tracking_number}` : ""}
-                </span>
+                </Link>
               </div>
             ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {!shipping ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Shipping</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CreateShipmentButton orderId={order.id} />
           </CardContent>
         </Card>
       ) : null}
