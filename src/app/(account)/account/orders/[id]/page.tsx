@@ -70,8 +70,23 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const detail = await getOrderDetail(id);
   if (!detail) notFound();
 
-  const { order, items, payments, statusHistory, production, shipping, address } = detail;
+  const { order, items, payments, statusHistory, production, productionHistory, shipping, address } = detail;
   const pendingPayments = payments.filter((p) => p.status === "pending");
+
+  const timeline = [
+    ...statusHistory.map((entry) => ({
+      id: entry.id,
+      label: ORDER_STATUS_LABELS[entry.status] ?? entry.status,
+      note: entry.note,
+      createdAt: entry.created_at,
+    })),
+    ...productionHistory.map((entry) => ({
+      id: entry.id,
+      label: PRODUCTION_STATUS_LABELS[entry.status] ?? entry.status,
+      note: entry.note,
+      createdAt: entry.created_at,
+    })),
+  ].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 
   return (
     <div className="flex flex-col gap-6">
@@ -115,20 +130,20 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         </CardContent>
       </Card>
 
-      {statusHistory.length > 0 ? (
+      {timeline.length > 0 ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Order Timeline</CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="flex flex-col gap-3 text-sm">
-              {statusHistory.map((entry) => (
+              {timeline.map((entry) => (
                 <li key={entry.id} className="flex justify-between gap-4">
                   <span>
-                    {ORDER_STATUS_LABELS[entry.status] ?? entry.status}
+                    {entry.label}
                     {entry.note ? <span className="block text-xs text-muted-foreground">{entry.note}</span> : null}
                   </span>
-                  <span className="shrink-0 text-xs text-muted-foreground">{formatDate(entry.created_at)}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">{formatDate(entry.createdAt)}</span>
                 </li>
               ))}
             </ul>
