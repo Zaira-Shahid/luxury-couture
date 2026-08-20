@@ -1018,7 +1018,14 @@ Never expose secret payment keys.
 
 # MODULE 12 — ORDER MANAGEMENT
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
+
+(Production/shipping status display is read-only here, reading tables that already existed from
+Module 1's schema pass — Module 13 owns the actual production pipeline UI and Module 14 owns
+shipping/tracking. "Production handoff" is scoped to creating the initial `production_orders` row
+only, nothing beyond it. Status transitions are unrestricted for now — a real state machine is
+explicitly Module 13's job. "Notifications"/"customer communication" use the existing `notifications`
+table in-app only; the full multi-channel notification engine is Module 15's.)
 
 Customer:
 
@@ -2560,12 +2567,12 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULE 11 COMPLETE`
+`MODULE 12 COMPLETE`
 
 Current Module:
 
-`MODULE 11 — COMPLETE`
+`MODULE 12 — COMPLETE`
 
 Next Action:
 
-`Start Module 12`
+`Start Module 13`

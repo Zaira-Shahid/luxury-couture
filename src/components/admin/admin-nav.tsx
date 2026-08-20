@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 // covering every admin area — this isn't trying to anticipate that.
 const NAV_ITEMS = [
   { href: "/admin", label: "Dashboard" },
+  { href: "/admin/orders", label: "Orders" },
   { href: "/admin/products", label: "Products" },
   { href: "/admin/collections", label: "Collections" },
   { href: "/admin/categories", label: "Categories" },
