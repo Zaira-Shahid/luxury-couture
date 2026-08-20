@@ -121,6 +121,7 @@ export async function placeOrder(formData: FormData): Promise<ActionResult> {
       status: "pending",
       subtotal,
       total_amount: subtotal,
+      balance_due_amount: subtotal,
       notes: parsed.data.notes,
     })
     .select("id, order_number")

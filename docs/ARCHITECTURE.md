@@ -376,6 +376,78 @@ Quick reference for how this codebase is organized. For the full product roadmap
   simply nullable with no exclusivity check. No fix was needed; the planned `0031` migration was
   deleted before being applied.
 
+## Payment System (Module 11)
+
+- **Provider abstraction, free-first, same shape as chat (Module 9).** `lib/payments/provider.ts`
+  defines one `PaymentProvider` interface (`createCheckoutSession`, `refund`); `StripeProvider` is
+  the real implementation, `ManualProvider` exists only for interface symmetry (manual/offline
+  payments are confirmed directly by an admin action, never routed through a provider call).
+  `isStripeConfigured()` (`!!process.env.STRIPE_SECRET_KEY`) gates whether the storefront shows a
+  "Pay Now" button at all — unset, customers see "we'll contact you to arrange payment" instead, so
+  the app runs correctly with zero payment-provider cost/setup.
+- **Stripe Checkout Sessions, not Elements/Payment Element.** Deliberately redirect-based
+  (`mode: "payment"`) so no `@stripe/stripe-js` is needed client-side at all; Checkout automatically
+  surfaces Apple Pay/Google Pay when the browser/device supports them, satisfying that requirement
+  without building anything extra.
+- **The webhook, not the client redirect, is the only source of truth for payment status** — per
+  "never trust client-submitted status" (Master Build Plan §11). `initiatePayment`'s
+  `success_url`/`cancel_url` only ever show a "confirming your payment now" message, never claim
+  success directly; `/api/webhooks/stripe` verifies every event's signature against
+  `STRIPE_WEBHOOK_SECRET` before trusting anything in it, and only a verified `checkout.session.completed`
+  event flips a `payments` row to `succeeded`.
+- **Raw body required for signature verification.** `request.text()`, never `request.json()` first —
+  parsing the body as JSON would consume the stream and break `stripe.webhooks.constructEvent`.
+- **`orders.deposit_amount`/`balance_due_amount` weren't being set at order-creation time — a real
+  gap, caught by a self-initiated consistency check, not a review comment.** Both `placeOrder`
+  (cart checkout) and `acceptQuotation` insert a new `orders` row, but neither originally set
+  `balance_due_amount` (left at its column default of `0`, even though the full amount was actually
+  owed). Fixed in both: `placeOrder` always sets `balance_due_amount: subtotal` (it has no
+  deposit concept — one `full` payment per cart order); `acceptQuotation` sets
+  `deposit_amount`/`balance_due_amount` from the quotation's own `deposit_amount`, and now branches
+  the payment it creates into a `deposit` (if the admin set one) versus a `full` payment for the
+  whole quoted price — a deposit-first order gets its balance collected later via the admin's
+  "create additional payment" action.
+- **Idempotent order-total recomputation, not incremental — a bug caught before it ever ran.**
+  `updateOrderAfterPayment` (in the webhook route) recomputes `deposit_paid_amount` and
+  `balance_due_amount` from the *complete* set of an order's currently-`succeeded` payments every
+  time it runs, rather than adding the payment just processed. An incremental version would
+  double-count on a retried/duplicate webhook delivery — Stripe explicitly does not guarantee
+  exactly-once delivery. Verified live: the same signed `checkout.session.completed` event replayed
+  a second time leaves `balance_due_amount` unchanged (still correctly `0`), while still logging a
+  second `payment_transactions` row (that table is a raw audit log, deliberately not deduplicated).
+- **`orders`/`order_items`/`payments` stay admin/service-role-write-only by RLS (Module 1's original
+  design)** — `initiatePayment`, `markPaymentPaidManually`, `refundPayment`, and
+  `createAdditionalPayment` all validate ownership/state against the regular RLS-respecting client
+  first, then use the service-role client (webhook route) or rely on the caller already being
+  admin-gated (admin actions, behind `/admin`'s middleware auth check) for the actual write.
+- **Verified live**, via `scripts/test-payments.mjs` (two real customers + a real admin, service-role
+  and RLS-respecting clients side by side, cleaned up after) and a live `stripe listen --forward-to
+  localhost:3000/api/webhooks/stripe` tunnel against the real Stripe test-mode API:
+  - Cross-customer payment visibility: a second customer's blind scan of `payments` returns nothing;
+    the owner sees their own row.
+  - Manual payment flow: admin mark-paid updates status/`paid_at`; the customer-facing query
+    reflects it immediately.
+  - A real Stripe Checkout Session created against the live test-mode API returns a genuine hosted
+    `url` and session id.
+  - The webhook route: accepts a validly-signed `checkout.session.completed` (200), updates the
+    `payments` row, recomputes and bumps the order to `confirmed`, logs `payment_transactions`;
+    rejects an invalid signature (400); a duplicate delivery of the same event stays idempotent on
+    `balance_due_amount` while still logging its own audit row; `charge.refunded` is accepted and
+    handled without error.
+  - Separately, `stripe trigger checkout.session.completed` was run through the actual running
+    `stripe listen` tunnel (a **real**, Stripe-server-signed event, not a self-signed test payload)
+    and confirmed to reach the live route and return 200 — validating the configured webhook secret
+    genuinely matches what Stripe issues, not just that the verification code is internally
+    consistent.
+  - **Not tested live**: a customer completing a real Stripe Checkout Session in a browser (would
+    require browser automation, not available in this environment) and a real Stripe `refund()`
+    call against a genuinely-completed PaymentIntent (Checkout Sessions only get a payable
+    PaymentIntent once a real payment method is confirmed via Stripe's hosted page). The Stripe
+    Checkout Session creation call, the webhook's signature verification and DB-side processing,
+    and the manual-provider refund path are all verified live; the Stripe-side `refund()` call
+    itself is verified by code review only (same `stripe.refunds.create` shape Stripe's own docs
+    use), not by a live successful refund.
+
 ## `lib/` layering
 
 - `lib/supabase/` — the only place Supabase clients are constructed. `client.ts` for Client

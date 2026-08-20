@@ -32,7 +32,7 @@ export async function acceptQuotation(quotationId: string, formData: FormData): 
 
   const { data: quotation } = await supabase
     .from("quotations")
-    .select("id, enquiry_id, customer_id, quoted_price, status")
+    .select("id, enquiry_id, customer_id, quoted_price, deposit_amount, status")
     .eq("id", quotationId)
     .single();
   if (!quotation || quotation.customer_id !== user.id) {
@@ -84,6 +84,8 @@ export async function acceptQuotation(quotationId: string, formData: FormData): 
     return { error: "Could not accept this quotation. Please try again." };
   }
 
+  const depositAmount = quotation.deposit_amount ? Number(quotation.deposit_amount) : null;
+
   const { data: order, error: orderErr } = await admin
     .from("orders")
     .insert({
@@ -93,6 +95,8 @@ export async function acceptQuotation(quotationId: string, formData: FormData): 
       shipping_address_id: addressId,
       status: "pending",
       subtotal: quotation.quoted_price,
+      deposit_amount: depositAmount ?? 0,
+      balance_due_amount: quotation.quoted_price,
       total_amount: quotation.quoted_price,
     })
     .select("id, order_number")
@@ -112,13 +116,28 @@ export async function acceptQuotation(quotationId: string, formData: FormData): 
     line_total: quotation.quoted_price,
   });
 
-  await admin.from("payments").insert({
-    order_id: order.id,
-    type: "full",
-    amount: quotation.quoted_price,
-    status: "pending",
-    provider: "manual",
-  });
+  // A quotation with a deposit_amount set (Module 11 business logic: the
+  // admin decided on a deposit-first arrangement) splits into a payable
+  // deposit now and a balance due later, rather than one lump 'full'
+  // payment — the admin-payments "create additional payment" action
+  // creates the corresponding balance-collection payment when it's due.
+  if (depositAmount && depositAmount > 0 && depositAmount < Number(quotation.quoted_price)) {
+    await admin.from("payments").insert({
+      order_id: order.id,
+      type: "deposit",
+      amount: depositAmount,
+      status: "pending",
+      provider: "manual",
+    });
+  } else {
+    await admin.from("payments").insert({
+      order_id: order.id,
+      type: "full",
+      amount: quotation.quoted_price,
+      status: "pending",
+      provider: "manual",
+    });
+  }
 
   redirect(`/checkout/confirmed/${order.order_number}`);
 }
