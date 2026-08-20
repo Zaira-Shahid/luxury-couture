@@ -2,11 +2,9 @@
 
 import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
-import {
-  builderSelectionsSchema,
-  inspirationImageSchema,
-  requestQuotationSchema,
-} from "@/lib/validations/builder";
+import { validateImageFile } from "@/lib/storage/validate-file";
+import { deleteFromStorage, randomStoragePath, uploadToStorage } from "@/lib/storage/upload-to-storage";
+import { builderSelectionsSchema, requestQuotationSchema } from "@/lib/validations/builder";
 import type { BuilderConfiguration, InspirationImage } from "@/types/database";
 
 export type ActionResult<T = undefined> = { error: string } | { success: true; data: T };
@@ -102,20 +100,44 @@ export async function addInspirationImage(
   token: string,
   formData: FormData
 ): Promise<ActionResult<InspirationImage>> {
-  const parsed = inspirationImageSchema.safeParse({ url: formData.get("url") });
-  if (!parsed.success) return { error: firstIssueMessage(parsed.error) };
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "Choose an image to upload." };
+  }
+  const validationError = validateImageFile(file);
+  if (validationError) return { error: validationError };
 
   const supabase = await createClient();
+
+  // Confirms the id+token match *before* touching Storage — the RPC would
+  // catch a bad token too, but there's no point uploading a file first
+  // just to have the DB insert reject it afterwards.
+  const { data: existing } = await supabase.rpc("get_builder_configuration", {
+    p_id: configId,
+    p_token: token,
+  });
+  if (!existing?.length) return { error: "This design link looks invalid." };
+
+  const path = randomStoragePath(`inspiration/${configId}`, file);
+  const uploaded = await uploadToStorage("inspiration-images", path, file);
+  if ("error" in uploaded) {
+    logger.error("inspiration image upload failed", new Error(uploaded.error), { configId });
+    return { error: "Could not upload that image. Please try again." };
+  }
+
   const { data, error } = await supabase.rpc("add_inspiration_image", {
     p_config_id: configId,
     p_token: token,
-    p_url: parsed.data.url,
+    p_url: uploaded.url,
+    p_storage_path: uploaded.path,
   });
 
   if (error || !data) {
-    logger.error("inspiration image add failed", error, { configId });
+    logger.error("inspiration image record failed", error, { configId });
+    await deleteFromStorage("inspiration-images", uploaded.path);
     return { error: "Could not add that image. Please try again." };
   }
+
   return { success: true, data: data as InspirationImage };
 }
 
@@ -124,15 +146,21 @@ export async function removeInspirationImage(
   token: string
 ): Promise<ActionResult> {
   const supabase = await createClient();
-  const { error } = await supabase.rpc("remove_inspiration_image", {
+  const { data, error } = await supabase.rpc("remove_inspiration_image", {
     p_image_id: imageId,
     p_token: token,
   });
 
-  if (error) {
+  if (error || !data) {
     logger.error("inspiration image remove failed", error, { imageId });
     return { error: "Could not remove that image. Please try again." };
   }
+
+  const deleted = data as InspirationImage;
+  if (deleted.storage_path) {
+    await deleteFromStorage("inspiration-images", deleted.storage_path);
+  }
+
   return { success: true, data: undefined };
 }
 
