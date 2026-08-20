@@ -81,11 +81,15 @@ const { error: badUpdateErr } = await guest.rpc("update_builder_configuration", 
 });
 await check("update with wrong token is rejected", !!badUpdateErr);
 
-// Inspiration image via RPC.
+// Inspiration image via RPC. Module 8 added p_storage_path (real Storage
+// objects, not pasted URLs) — this test only exercises the DB/RPC layer,
+// so a placeholder path is fine; scripts/test-storage.mjs covers the real
+// upload/delete path against actual Storage.
 const { data: image, error: imageErr } = await guest.rpc("add_inspiration_image", {
   p_config_id: configId,
   p_token: token,
   p_url: "https://example.com/inspiration.jpg",
+  p_storage_path: "inspiration/test-placeholder.jpg",
 });
 await check("guest can add an inspiration image via RPC", !imageErr && !!image);
 

@@ -1,14 +1,15 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
-import { useState, useTransition } from "react";
+import { ImageUp, Trash2 } from "lucide-react";
+import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { addInspirationImage, removeInspirationImage } from "@/features/builder/actions";
+import { compressImage } from "@/lib/storage/compress-image";
+import { validateImageFile } from "@/lib/storage/validate-file";
+import { cn } from "@/lib/utils";
 import type { InspirationImage } from "@/types/database";
 
 export function NotesInspirationStep({
@@ -26,31 +27,41 @@ export function NotesInspirationStep({
   images: InspirationImage[];
   onImagesChange: (images: InspirationImage[]) => void;
 }) {
-  const [url, setUrl] = useState("");
-  const [isPending, startTransition] = useTransition();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, startUploading] = useTransition();
+  const [isRemoving, startRemoving] = useTransition();
 
-  function handleAdd() {
+  function handleFiles(files: FileList | null) {
+    const file = files?.[0];
+    if (!file) return;
+
     if (!configId || !token) {
       toast.error("Save your design first (pick at least one option) before adding inspiration images.");
       return;
     }
-    if (!url.trim()) return;
-    const formData = new FormData();
-    formData.set("url", url);
-    startTransition(async () => {
+    const validationError = validateImageFile(file);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+
+    startUploading(async () => {
+      const compressed = await compressImage(file);
+      const formData = new FormData();
+      formData.set("file", compressed);
       const result = await addInspirationImage(configId, token, formData);
       if ("error" in result) {
         toast.error(result.error);
       } else {
         onImagesChange([...images, result.data]);
-        setUrl("");
       }
     });
   }
 
   function handleRemove(imageId: string) {
     if (!token) return;
-    startTransition(async () => {
+    startRemoving(async () => {
       const result = await removeInspirationImage(imageId, token);
       if ("error" in result) {
         toast.error(result.error);
@@ -64,7 +75,7 @@ export function NotesInspirationStep({
     <div>
       <h2 className="font-heading text-2xl">Notes &amp; Inspiration</h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Anything else our design team should know? Add links to inspiration images too.
+        Anything else our design team should know? Upload inspiration images too.
       </p>
 
       <div className="mt-6 flex flex-col gap-1.5">
@@ -79,18 +90,43 @@ export function NotesInspirationStep({
       </div>
 
       <div className="mt-6">
-        <Label className="mb-2">Inspiration images (URL)</Label>
-        <div className="flex gap-2">
-          <Input
-            placeholder="https://…"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            className="flex-1"
+        <Label className="mb-2">Inspiration images</Label>
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => fileInputRef.current?.click()}
+          onKeyDown={(e) => e.key === "Enter" && fileInputRef.current?.click()}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setIsDragging(true);
+          }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setIsDragging(false);
+            handleFiles(e.dataTransfer.files);
+          }}
+          className={cn(
+            "flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground transition-colors",
+            isDragging ? "border-primary bg-secondary/50" : "border-border hover:border-foreground/30"
+          )}
+        >
+          <ImageUp className="size-6" strokeWidth={1.5} />
+          <p>{isUploading ? "Uploading…" : "Drag an image here, or click to choose one"}</p>
+          <p className="text-xs">JPEG, PNG, WebP, or GIF — up to 5MB</p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            className="hidden"
+            disabled={isUploading}
+            onChange={(e) => {
+              handleFiles(e.target.files);
+              e.target.value = "";
+            }}
           />
-          <Button type="button" variant="outline" disabled={isPending} onClick={handleAdd}>
-            Add
-          </Button>
         </div>
+
         {images.length > 0 ? (
           <div className="mt-3 grid grid-cols-3 gap-3 sm:grid-cols-4">
             {images.map((image) => (
@@ -99,6 +135,7 @@ export function NotesInspirationStep({
                 <img src={image.url} alt="" className="size-full object-cover" />
                 <button
                   type="button"
+                  disabled={isRemoving}
                   onClick={() => handleRemove(image.id)}
                   className="absolute top-1 right-1 rounded-md bg-background/80 p-1 opacity-0 transition-opacity group-hover:opacity-100"
                   aria-label="Remove image"

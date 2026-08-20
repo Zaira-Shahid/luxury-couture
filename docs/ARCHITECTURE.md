@@ -218,6 +218,44 @@ Quick reference for how this codebase is organized. For the full product roadmap
   order time or just reference the live profile is a real design decision for whichever of Modules
   10–12 actually creates orders — guessing at it now would be scope creep in the wrong direction.
 
+## Inspiration Upload & Media Management (Module 8)
+
+- **Where Supabase Storage actually gets built** — every prior module that needed a real image
+  (Module 3's logo, Module 5's product/collection images, Module 6's inspiration images, Module 7's
+  measurement guide) deferred to this one, using URL-paste as the interim. Two buckets, both
+  `public: true` for reads: `inspiration-images` (5MB limit) and `media` (10MB limit), both with
+  `allowed_mime_types` locked to real image types — `supabase/migrations/0025`.
+- **Storage RLS can't replicate the id+token gate from Module 6's RPCs.** `storage.objects` policies
+  only see the request's auth context (`auth.uid()`/`auth.role()`) — they have no equivalent to a
+  `SECURITY DEFINER` function's explicit parameters, so there's no way to write a Storage policy that
+  checks "does this upload know the right `share_token`." Both buckets have **no client-writable
+  RLS policy at all** — confirmed live (`scripts/test-storage.mjs`: a guest's *valid* upload attempt
+  is rejected even with a real, correctly-typed file). Every upload/delete instead goes through a
+  Server Action using the service-role client (`lib/storage/upload-to-storage.ts`), which re-runs
+  the exact same authorization already built — the token-gated RPCs for guests, `is_admin()` RLS on
+  the `media` table for the library — *before* ever touching Storage.
+- `file_size_limit`/`allowed_mime_types` are bucket-level columns Supabase Storage enforces itself,
+  server-side, on every upload — verified live that an oversized or wrong-MIME-type upload is
+  rejected by the bucket even via the service-role client, not just by the app's own
+  `validate-file.ts` checks (which exist for immediate client-side feedback, not as the real
+  boundary).
+- `add_inspiration_image`/`remove_inspiration_image` (Module 6, `0022`) originally took/returned
+  just a URL — the placeholder pattern from before real Storage existed. `0026` changed
+  `remove_inspiration_image` to return the deleted row (so the Server Action can find its
+  `storage_path` and delete the actual file, not just the DB row — Module 6's version couldn't have
+  done this, since a pasted external URL was never really "owned" storage to clean up). `0027`
+  added a `p_storage_path` parameter to `add_inspiration_image` instead of inserting a placeholder
+  and immediately overwriting it in a second round-trip.
+- Compression is client-side only (`lib/storage/compress-image.ts`, Canvas API — resize to a max
+  dimension, re-encode as JPEG at reduced quality) — GIFs pass through untouched to avoid flattening
+  animation, PNGs stay PNG to preserve transparency. No server-side image processing dependency;
+  "where practical" for this stack means the browser does the work before the file ever leaves it.
+- **Scoped out deliberately:** enquiry/order attachments — `enquiries` has no attachment column at
+  all, and orders don't exist until Modules 10–12, so wiring either up now would mean inventing a
+  data model nothing asked for. The admin media library (`/admin/media`) is a standalone foundation
+  — it is *not* wired in as a picker into the Module 5 product/collection forms or Module 3's logo
+  field in this module; that's flagged as a natural fast-follow, not silently done here.
+
 ## `lib/` layering
 
 - `lib/supabase/` — the only place Supabase clients are constructed. `client.ts` for Client
@@ -230,6 +268,13 @@ Quick reference for how this codebase is organized. For the full product roadmap
   shared between Server Actions and (where useful) client-side form checks.
 - `lib/config/` — centralized, typed config (brand name, description, URL) — the fallback layer
   underneath `lib/settings/`, used directly wherever Supabase-backed settings aren't relevant.
+- `lib/storage/` — file validation/compression (client-safe) and the service-role
+  upload/delete helper (server-only) — see Module 8 above.
+- `lib/measurements/`, `lib/media/`, `lib/catalog/`, `lib/builder/` — server-only read fetchers per
+  feature area. Fetchers with no parameters (option/lookup lists — `get-options.ts`,
+  `get-field-definitions.ts`, `get-products.ts`, etc.) use `React.cache` like `lib/settings/`;
+  fetchers parameterized by the current request (a specific id+token, the signed-in user, an admin
+  status filter) don't, since there's nothing to usefully dedupe across a single call.
 - `lib/logger.ts` — thin logging wrapper so server code never leaks raw errors to the client;
   swap the implementation for a real provider later without touching call sites.
 

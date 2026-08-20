@@ -24,10 +24,6 @@ export const builderSelectionsSchema = z.object({
     .transform((value) => (value ? value : null)),
 });
 
-export const inspirationImageSchema = z.object({
-  url: z.string().trim().url("Enter a valid image URL."),
-});
-
 export const requestQuotationSchema = z.object({
   contactName: z.string().trim().min(2, "Enter your name.").max(200),
   contactEmail: z.string().trim().email("Enter a valid email address."),
