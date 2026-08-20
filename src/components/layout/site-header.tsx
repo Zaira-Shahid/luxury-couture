@@ -2,12 +2,17 @@ import Link from "next/link";
 
 import { siteConfig } from "@/lib/config/site";
 import { getAuthUser } from "@/lib/auth/session";
+import { getCartItemCount } from "@/lib/cart/get-cart";
 import { getSiteSettings } from "@/lib/settings/get-site-settings";
 
 import { AnnouncementBar } from "./announcement-bar";
 
 export async function SiteHeader() {
-  const [user, settings] = await Promise.all([getAuthUser(), getSiteSettings()]);
+  const [user, settings, cartCount] = await Promise.all([
+    getAuthUser(),
+    getSiteSettings(),
+    getCartItemCount(),
+  ]);
 
   return (
     <>
@@ -39,6 +44,9 @@ export async function SiteHeader() {
             </Link>
             <Link href="/contact" className="transition-colors hover:text-foreground">
               Contact
+            </Link>
+            <Link href="/cart" className="transition-colors hover:text-foreground">
+              Cart{cartCount > 0 ? ` (${cartCount})` : ""}
             </Link>
             {user ? (
               <Link href="/account" className="transition-colors hover:text-foreground">

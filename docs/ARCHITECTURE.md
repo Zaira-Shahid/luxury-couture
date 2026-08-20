@@ -297,6 +297,70 @@ Quick reference for how this codebase is organized. For the full product roadmap
   "Cart, Checkout & **Quotation Flow**" and its stated pipeline `Enquiry → Quote → Customer
   Approval → Order"). Building quote creation here would step on that module's territory.
 
+## Cart, Checkout & Quotation Flow (Module 10)
+
+- **A fourth instance of the same guest-scan leak — schema-predicted, same as Module 6's.** `carts`'
+  own migration comment (0005, Module 1) said *"Module 10 (checkout) can harden this further when
+  it lands."* Confirmed live before fixing: a guest cart's `session_id` itself was readable via a
+  blind table scan from an unrelated anonymous session. Fixed in `0030` the same way as `0022` —
+  RLS locked to owner-or-admin, `SECURITY DEFINER` RPCs (`get_or_create_cart`, `get_cart_items`,
+  `add_cart_item`, `update_cart_item_quantity`, `remove_cart_item`) requiring `session_id` for the
+  guest path. Unlike a builder design, a cart isn't naturally shareable, so the session id lives in
+  a cookie (`lib/cart/session.ts`), not the URL.
+- **A real concurrency bug, found only because cleanup verification checked for it.** After the
+  first working version of `get_or_create_cart` (SELECT-then-INSERT), a routine
+  "confirm nothing was left behind" check turned up two cart rows sharing one `session_id` — that
+  should be impossible. Cause: `SiteHeader` (cart count) and a page like `/cart` both call
+  `get_or_create_cart` with the same session id, and Next.js runs independent Server Component data
+  fetches within one render in parallel — both calls could pass the "no active cart" check before
+  either `INSERT` committed. Fixed in `0032` with partial unique indexes (one active cart per guest
+  session, one per signed-in customer) and `INSERT ... ON CONFLICT ... DO UPDATE`, verified by
+  firing 10 genuinely concurrent RPC calls with the same session id and confirming exactly one row
+  results.
+- **Server Components can't set cookies — a bug caught before it ever ran in production.** The
+  first version of the cart-session cookie helper called `cookies().set()` from `getCart()`, which
+  is invoked by Server Component pages (`/cart`, `/checkout`, `SiteHeader`) — Next.js only allows
+  cookie mutation in Server Actions/Route Handlers, so a first-time visitor's very first request
+  would have thrown. Fixed with a read-only `peekCartSessionId()` for Server Component contexts,
+  and the cookie itself is now guaranteed to exist *before* any page renders by setting it in
+  `src/middleware.ts` (the one place that can) rather than lazily on first read.
+- **A tampered client-supplied price never reaches a real order — structurally, not by review.**
+  `cart_items.unit_price_snapshot` is client-writable by its own original column comment ("NOT a
+  source of truth"); `placeOrder`/`acceptQuotation` never read it — every order line re-fetches the
+  real price from `products.base_price` / `builder_configurations.estimated_price` /
+  `quotations.quoted_price` at order-creation time. Verified live: added a cart item with a
+  snapshot price of `1` against a real `250` product, confirmed the persisted `order_items.unit_price`
+  and `orders.subtotal` reflect `250`, not `1`.
+- **`orders`/`order_items`/`payments` are admin/service-role-write-only by RLS**, per Module 1's own
+  design intent ("all writes happen server-side once prices/quantities/status have been
+  validated"). `placeOrder` therefore uses the service-role client for the actual insert — the
+  *validation* (cart ownership, address/measurement-profile ownership, real prices) all happens
+  first against the regular RLS-respecting client. `acceptQuotation` needs the same elevation for a
+  different reason: `quotations` is admin-write-only with no separate customer-writable
+  "acceptance" column modeled, so accepting one is a legitimate, narrow use of the service-role
+  client — scoped to exactly that one enforced transition (owner check + `status = 'sent'` guard
+  against a double-accept race), not a general bypass.
+- **A checkout-specific redirect quirk, found and fixed, not shipped.** `/checkout`'s own
+  `redirect()` for a signed-out visitor produced a `200` with a client-side/meta-refresh redirect
+  instead of a clean `307` — `PageTransition` (Module 4, a client component wrapping every
+  `(storefront)` page) forces the response to start streaming before a nested page's `redirect()`
+  can run, so the HTTP status is already committed. The browser experience was still correct (the
+  embedded `NEXT_REDIRECT` digest navigates client-side, with a 1-second meta-refresh fallback),
+  but not equivalent to how `/account`/`/admin` already redirect. Fixed by gating `/checkout` in
+  middleware too, the same way — verified with a real production build (`next build && next
+  start`), since this is dev-mode-adjacent behavior that needed confirming outside dev mode.
+  **Not fixed everywhere**: the same characteristic likely affects other storefront `notFound()`/
+  `redirect()` calls from earlier modules (e.g. `products/[slug]`) — there's no data-leak risk
+  either way (RLS already governs what data is ever included), so this is a status-code/SEO
+  correctness question, not a security one, and fixing it site-wide is a separate, cross-cutting
+  pass rather than something to absorb into this module.
+- **A "gap" in my own plan that turned out not to exist.** I initially planned a migration to relax
+  `order_items`' exactly-one-of-`product_id`/`builder_configuration_id` constraint, believing it
+  matched `cart_items`' real constraint of the same shape. Checking `pg_constraint` directly before
+  writing that migration showed `order_items` never had any such constraint — both columns are
+  simply nullable with no exclusivity check. No fix was needed; the planned `0031` migration was
+  deleted before being applied.
+
 ## `lib/` layering
 
 - `lib/supabase/` — the only place Supabase clients are constructed. `client.ts` for Client
@@ -312,11 +376,14 @@ Quick reference for how this codebase is organized. For the full product roadmap
 - `lib/storage/` — file validation/compression (client-safe) and the service-role
   upload/delete helper (server-only) — see Module 8 above.
 - `lib/measurements/`, `lib/media/`, `lib/catalog/`, `lib/builder/`, `lib/consultations/`,
-  `lib/enquiries/` — server-only read fetchers per feature area. Fetchers with no parameters
-  (option/lookup lists — `get-options.ts`, `get-field-definitions.ts`, `get-products.ts`,
-  `get-types.ts`, etc.) use `React.cache` like `lib/settings/`; fetchers parameterized by the
-  current request (a specific id+token, the signed-in user, an admin status filter) don't, since
-  there's nothing to usefully dedupe across a single call.
+  `lib/enquiries/`, `lib/cart/` — server-only read fetchers per feature area. Fetchers with no
+  parameters (option/lookup lists — `get-options.ts`, `get-field-definitions.ts`,
+  `get-products.ts`, `get-types.ts`, etc.) use `React.cache` like `lib/settings/`; fetchers
+  parameterized by the current request (a specific id+token, the signed-in user, an admin status
+  filter) don't, since there's nothing to usefully dedupe across a single call. `lib/cart/session.ts`
+  is the one exception with two variants of the same helper — `getOrCreateCartSessionId()` for
+  Server Actions (can mutate cookies) and `peekCartSessionId()` for Server Components (read-only;
+  see Module 10 above for why that split exists).
 - `lib/chat/` — the live-chat provider abstraction (see Module 9 above); the actual widget UI lives
   in `components/chat/`, matching the project's component-vs-lib split elsewhere.
 - `lib/logger.ts` — thin logging wrapper so server code never leaks raw errors to the client;
