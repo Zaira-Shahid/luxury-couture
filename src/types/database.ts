@@ -280,10 +280,26 @@ export interface Appointment {
   id: UUID;
   customer_id: UUID | null;
   type: AppointmentType;
+  consultation_type_id: UUID | null;
   scheduled_at: ISODateTime;
   duration_minutes: number;
   status: AppointmentStatus;
   notes: string | null;
+  contact_name: string;
+  contact_email: string;
+  contact_phone: string | null;
+  created_at: ISODateTime;
+  updated_at: ISODateTime;
+}
+
+export interface ConsultationType {
+  id: UUID;
+  name: string;
+  slug: string;
+  description: string | null;
+  duration_minutes: number;
+  is_active: boolean;
+  sort_order: number;
   created_at: ISODateTime;
   updated_at: ISODateTime;
 }

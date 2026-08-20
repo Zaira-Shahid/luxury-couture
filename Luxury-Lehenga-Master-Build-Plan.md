@@ -935,7 +935,7 @@ Admin media library foundation.
 
 # MODULE 9 — ENQUIRIES, CONSULTATIONS & CONTACT
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
 
 Implement:
 
@@ -2553,12 +2553,12 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULE 8 COMPLETE`
+`MODULE 9 COMPLETE`
 
 Current Module:
 
-`MODULE 8 — COMPLETE`
+`MODULE 9 — COMPLETE`
 
 Next Action:
 
-`Start Module 9`
+`Start Module 10`

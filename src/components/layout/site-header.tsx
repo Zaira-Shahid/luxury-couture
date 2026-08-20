@@ -34,6 +34,12 @@ export async function SiteHeader() {
             <Link href="/builder" className="transition-colors hover:text-foreground">
               Design Your Own
             </Link>
+            <Link href="/consultations" className="transition-colors hover:text-foreground">
+              Book a Consultation
+            </Link>
+            <Link href="/contact" className="transition-colors hover:text-foreground">
+              Contact
+            </Link>
             {user ? (
               <Link href="/account" className="transition-colors hover:text-foreground">
                 My account

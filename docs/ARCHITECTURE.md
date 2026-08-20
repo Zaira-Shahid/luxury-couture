@@ -256,6 +256,47 @@ Quick reference for how this codebase is organized. For the full product roadmap
   — it is *not* wired in as a picker into the Module 5 product/collection forms or Module 3's logo
   field in this module; that's flagged as a natural fast-follow, not silently done here.
 
+## Enquiries, Consultations & Contact (Module 9)
+
+- **A third instance of the same guest-scan leak**, found the same way as Modules 5 and 6: before
+  proposing any code, checking whether the pattern recurred. `appointments`' SELECT policy had the
+  identical `customer_id is null` clause; confirmed live that a guest's private consultation notes
+  were readable in full from an unrelated anonymous session. Fixed in `0028`, same shape as `0021`.
+- **The leak fix alone would have left guest booking broken**, not just secure: `appointments` had
+  no `contact_name`/`contact_email`/`contact_phone` at all, so a guest appointment had no way to
+  know who it belonged to. Added in the same migration as the leak fix — fixing the read leak
+  without this would mean guests could still create appointments nobody could ever act on.
+- **`consultation_types`** (`0029`) — the actual bookable offerings (name, description, duration),
+  same public-read/admin-write shape as fabrics/embroidery_types. `appointments.type` stays the
+  broad category (`consultation`/`fitting`/`other`); `consultation_type_id` is the specific,
+  admin-managed thing a customer picks when booking.
+- **Booking conflict checking requires reading *other* customers' slots** — something owner-or-admin
+  RLS (correctly) no longer allows a regular caller to do after the `0028` fix. `bookConsultation`
+  (`features/consultations/actions.ts`) uses the service-role client for exactly that narrow
+  read — only the timing fields (`scheduled_at`, `duration_minutes`), never contact info — before
+  the actual booking insert goes through the normal RLS-respecting path.
+- **Date/time handling is deliberately naive, not timezone-converted**, because there's no
+  configured store timezone anywhere in this app to convert against, and the customer's browser
+  timezone isn't obviously the right one either (an in-person/atelier appointment is naturally in
+  the store's local time, not the visitor's). `<input type="datetime-local">` produces a bare
+  `"YYYY-MM-DDTHH:mm"` string with no offset; `lib/validations/consultations.ts` parses and
+  validates it as literal text (business-hours check via string slicing, never `Date.getHours()`,
+  which is timezone-dependent) and stores it with a fixed `Z` suffix so the same input always
+  round-trips to the same value regardless of what timezone the server happens to run in. This was
+  caught and fixed *during* implementation — an earlier version converted through `Date`/
+  `toISOString()` on the client, which silently shifts the hour whenever the browser's timezone
+  differs from the server's.
+- **Live chat is the free-first provider abstraction pattern**, applied for the first time (the
+  others — payments/notifications/shipping/AI — are still Modules 11/15/14/22, not built yet):
+  `lib/chat/index.tsx` is the one mount point (`ChatWidget`, used in the storefront layout), which
+  renders `components/chat/mock-chat-widget.tsx` by default — a compose form that submits straight
+  into `enquiries`. Swapping in a real provider later means changing what `ChatWidget` renders, not
+  touching where it's mounted.
+- **Admin enquiry management stops at triage** (status, assignment) — creating the actual
+  `quotations` row is explicitly Module 10's job ("admin quote workflow", per its own title
+  "Cart, Checkout & **Quotation Flow**" and its stated pipeline `Enquiry → Quote → Customer
+  Approval → Order"). Building quote creation here would step on that module's territory.
+
 ## `lib/` layering
 
 - `lib/supabase/` — the only place Supabase clients are constructed. `client.ts` for Client
@@ -270,11 +311,14 @@ Quick reference for how this codebase is organized. For the full product roadmap
   underneath `lib/settings/`, used directly wherever Supabase-backed settings aren't relevant.
 - `lib/storage/` — file validation/compression (client-safe) and the service-role
   upload/delete helper (server-only) — see Module 8 above.
-- `lib/measurements/`, `lib/media/`, `lib/catalog/`, `lib/builder/` — server-only read fetchers per
-  feature area. Fetchers with no parameters (option/lookup lists — `get-options.ts`,
-  `get-field-definitions.ts`, `get-products.ts`, etc.) use `React.cache` like `lib/settings/`;
-  fetchers parameterized by the current request (a specific id+token, the signed-in user, an admin
-  status filter) don't, since there's nothing to usefully dedupe across a single call.
+- `lib/measurements/`, `lib/media/`, `lib/catalog/`, `lib/builder/`, `lib/consultations/`,
+  `lib/enquiries/` — server-only read fetchers per feature area. Fetchers with no parameters
+  (option/lookup lists — `get-options.ts`, `get-field-definitions.ts`, `get-products.ts`,
+  `get-types.ts`, etc.) use `React.cache` like `lib/settings/`; fetchers parameterized by the
+  current request (a specific id+token, the signed-in user, an admin status filter) don't, since
+  there's nothing to usefully dedupe across a single call.
+- `lib/chat/` — the live-chat provider abstraction (see Module 9 above); the actual widget UI lives
+  in `components/chat/`, matching the project's component-vs-lib split elsewhere.
 - `lib/logger.ts` — thin logging wrapper so server code never leaks raw errors to the client;
   swap the implementation for a real provider later without touching call sites.
 
@@ -288,10 +332,11 @@ directly inside `useTransition`, with local `useState` for the error message. Se
 
 ## Provider abstractions
 
-Per the Master Build Plan's free-first policy, payments, notifications, shipping, and AI are each
-built behind a provider interface with a mock/free implementation during development, so a real
-provider can be swapped in later without changing calling code. These land in their respective
-modules (11, 15, 14, 22) — nothing is implemented yet.
+Per the Master Build Plan's free-first policy, payments, notifications, shipping, chat, and AI are
+each built behind a provider interface with a mock/free implementation during development, so a
+real provider can be swapped in later without changing calling code. Chat is implemented (Module 9,
+`lib/chat/`) — see above. Payments, notifications, shipping, and AI land in their respective
+modules (11, 15, 14, 22) — not implemented yet.
 
 ## Theming
 
