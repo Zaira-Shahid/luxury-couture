@@ -1051,7 +1051,12 @@ Admin:
 
 # MODULE 13 — PRODUCTION WORKFLOW
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
+
+(The 12-stage enum is fixed, not admin-customizable — "allow admin to customize statuses later"
+stays a deferred stretch goal, matching the plan's own wording. Production staff access is scoped
+to the 'production' role only, not 'staff', per explicit instruction — a narrow, additive RLS
+change just for this module's own need, not Module 26's general per-role permission system.)
 
 Model Pakistan production workflow.
 
@@ -2567,12 +2572,12 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULE 12 COMPLETE`
+`MODULE 13 COMPLETE`
 
 Current Module:
 
-`MODULE 12 — COMPLETE`
+`MODULE 13 — COMPLETE`
 
 Next Action:
 
-`Start Module 13`
+`Start Module 14`

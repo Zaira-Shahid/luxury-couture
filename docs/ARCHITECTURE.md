@@ -502,6 +502,91 @@ Quick reference for how this codebase is organized. For the full product roadmap
   RLS silently filters rather than rejecting, so this was checked by asserting 0 rows affected and
   the notification still unread afterward, not by expecting a thrown error).
 
+## Base UI Input: stale `defaultValue` after an in-place save
+
+- **Root cause, not a per-form bug.** `Input` (`src/components/ui/input.tsx`) wraps
+  `@base-ui/react/input`, which — unlike a plain `<input>` — actively watches `defaultValue` on an
+  uncontrolled field and warns if that prop's *value* changes after the field's first render
+  ("changing the default value state of an uncontrolled FieldControl after being initialized").
+  Five edit-in-place forms feed `Input`'s `defaultValue` straight from server-fetched data
+  (`product-form`, `collection-form`, `category-form`, `profile-form`, `measurement-form`), and
+  each one's update Server Action calls `revalidatePath` on the *same* page **without a redirect**
+  — a deliberate UX choice (stay on the page, show a success toast) established back in earlier
+  modules. Next.js's Server Action refresh then pushes the freshly-saved (now-different) record
+  into the still-mounted form, and Base UI catches the mismatch.
+- **Fix: remount, not "make everything controlled."** Each of the five call sites now passes
+  `key={`${id}-${updated_at}`}` to its form component (e.g. `<ProductForm key={...} .../>` in
+  `/admin/products/[id]/edit/page.tsx`). Since `updated_at` only changes when a save actually
+  succeeds, this is the React-canonical "reset state via key" pattern — the form gets a fresh
+  mount with the new data as its genuine initial `defaultValue`, rather than Base UI seeing an
+  already-initialized field's default change out from under it. Converting these forms to fully
+  controlled inputs was considered and rejected — a much bigger behavioral change across five
+  multi-field forms, for a problem a one-line `key` already solves cleanly.
+- **Checked, not assumed, that the pattern doesn't repeat elsewhere.** Only `Input`, `Button`, and
+  `Separator` wrap Base UI primitives in this codebase (grepped `@base-ui/react` imports directly);
+  `Textarea` and native `<select>`/`<input type="radio|checkbox">` don't, so they can't produce
+  this specific warning even though a couple of them (e.g. Module 12/13's native status-select
+  dropdowns) have the same *conceptual* staleness shape — out of scope since they don't warn.
+  Every other `Input` usage in the codebase (20 files total) was checked individually: the rest are
+  either create-only forms that reset or unmount on success (enquiry/consultation/checkout/address
+  forms), or fed by props that don't change post-mount. `media-library.tsx`'s per-item alt-text
+  `Input` looked similar but isn't: it seeds `useState(initialMedia)` once and never syncs it back
+  from a revalidated prop, so the `defaultValue` it passes never actually changes across renders —
+  a different (minor, unrelated) staleness bug, not this one, and left alone.
+- Module 13's own new `DetailsForm` (`/admin/production/[id]/details-form.tsx`) has the identical
+  shape (`Input` + `defaultValue` fed by `production_orders`, its update action revalidates the
+  same page) — given the `key` fix at the point of writing it, rather than needing a follow-up
+  patch.
+
+## Production Workflow (Module 13)
+
+- **A necessary, narrow RBAC change — not Module 26.** `is_admin()` was, until this module, the
+  *only* RLS write-gate anywhere in the schema (`role = 'admin'` exclusively) — `staff`/`production`
+  accounts could already reach every `/admin` page via middleware+layout, but every write silently
+  failed under RLS, and reads of `orders`/`production_orders` failed outright for anyone but an
+  admin or the order's own customer. Module 13's own line, *"Production staff should have limited
+  access,"* needed real RLS to back it, not just UI — that's a `0034` migration, not Module 26's
+  full per-role permission system (Super Admin/Sales/QC/Finance/Marketing, explicit per-role grants
+  — a much bigger, still-untouched piece of work). Scoped to exactly `role = 'production'`
+  (`staff` was explicitly excluded on request): a new `is_production_staff()` helper, additive
+  select/insert/update policies on `production_orders`/`production_status_history`, and — the part
+  that actually makes the pipeline usable — additive **read** access to `orders`/`order_items`,
+  but only for orders that already have a `production_orders` row (i.e., only what's actually been
+  handed to them, not the full order book, not orders still in sales negotiation). One further
+  additive policy lets that role insert into `notifications` (Module 12's pattern:
+  `advanceProductionStatus` notifies the customer the same way `updateOrderStatus` does).
+- **A real infinite-recursion bug, caught by the verify-then-cleanup discipline itself before
+  commit.** The first version of the new `orders` SELECT policy checked `production_orders` via a
+  raw `exists (select ... from production_orders ...)` subquery. But `production_orders`' own
+  pre-existing (Module 1, `0008`) SELECT policy checks *back* into `orders`
+  (`o.customer_id = auth.uid()`) to let the owning customer read it — so evaluating either policy
+  re-triggered the other: `orders` → `production_orders` → `orders` → ... Postgres surfaced this
+  immediately and unambiguously (`42P17`, "infinite recursion detected in policy for relation
+  orders") the moment the verification script tried a plain admin read of any order — which would
+  have broken `/admin/orders` entirely for every admin, not just production staff, had it shipped.
+  Fixed in `0036` the same way `is_admin()` itself avoids recursing into `profiles`: route the
+  existence check through a `security definer` function
+  (`order_has_production_handoff(order_id)`) whose internal query runs outside RLS entirely, so it
+  can never re-trigger `production_orders`' policies. Re-ran both Module 11's and Module 12's own
+  verification scripts afterward as a regression check — all still pass.
+- **No auto-sync between `production_orders.current_status` and `orders.status`** — a deliberate
+  choice, same reasoning as Module 12's "unrestricted status transitions": the two stay
+  independent, admin-driven fields. Advancing a production stage never silently changes the
+  order's top-level status behind anyone's back.
+- **The customer's order timeline (Module 12) now merges two history tables**, not just one:
+  `order_status_history` and `production_status_history`, sorted together by `created_at`. Both
+  were already independently RLS-readable by the order's owner; this is a small extension of an
+  existing card, not new access.
+- **Verified live** via `scripts/test-production.mjs` (a customer, an admin, and a `production`-role
+  account, cleaned up after): production staff can read a handed-off order and its items but
+  **not** an order that hasn't been sent to production (confirmed both filtered and via an
+  unfiltered blind scan — 1 row back, not 2); can advance `current_status`, insert history, and
+  insert a customer notification, all landing correctly and visible to the customer; cannot read
+  any `payments`, change `orders.status`, or write `order_notes` — confirming "limited," not just
+  "different." A plain `admin` account retains full access throughout (both orders, direct status
+  advancement). Re-ran `scripts/test-orders.mjs` and `scripts/test-payments.mjs` afterward with no
+  regressions.
+
 ## `lib/` layering
 
 - `lib/supabase/` — the only place Supabase clients are constructed. `client.ts` for Client
