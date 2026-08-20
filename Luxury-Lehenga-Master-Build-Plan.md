@@ -979,7 +979,14 @@ and normal product checkout where appropriate.
 
 # MODULE 11 — PAYMENT SYSTEM
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
+
+(Stripe test mode is the implemented provider — Apple Pay/Google Pay are surfaced automatically by
+Stripe Checkout with no extra work. PayPal: the `PaymentProvider` interface architecturally
+supports a second provider dropping in the same way Stripe does, but no PayPal implementation was
+written — no sandbox credentials were provided, matching the free-first default used elsewhere in
+this project. Manual/offline payment collection is the always-available fallback when no provider
+is configured.)
 
 Create payment abstraction.
 
@@ -2553,12 +2560,12 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULE 10 COMPLETE`
+`MODULE 11 COMPLETE`
 
 Current Module:
 
-`MODULE 10 — COMPLETE`
+`MODULE 11 — COMPLETE`
 
 Next Action:
 
-`Start Module 11`
+`Start Module 12`
