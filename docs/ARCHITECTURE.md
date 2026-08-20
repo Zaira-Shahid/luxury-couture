@@ -448,6 +448,60 @@ Quick reference for how this codebase is organized. For the full product roadmap
     itself is verified by code review only (same `stripe.refunds.create` shape Stripe's own docs
     use), not by a live successful refund.
 
+## Order Management (Module 12)
+
+- **Scope boundary vs. Modules 13/14.** Module 13 (Production Workflow) owns the actual 12-stage
+  pipeline UI and status-advancing logic; Module 14 (Shipping & Tracking) owns the shipping
+  abstraction and courier tracking. `production_orders`/`shipping_orders` (schema from Module 1's
+  `0008`) already existed with RLS ready but nothing writing to them — Module 12 reads them
+  defensively (a customer/admin order detail page just shows "no production/shipping info yet" if
+  neither row exists) and adds exactly one write: the "production handoff" bullet, creating the
+  initial `production_orders` row at its default `order_confirmed` status. It does not add any
+  status-advancing controls beyond that — those are Module 13's.
+- **`order_notes` is a separate admin-only table, not an `orders.admin_notes` column — a
+  deliberate structural choice, not a naming preference.** `orders`' own SELECT policy already
+  grants the owning customer full-row access (`customer_id = auth.uid() or is_admin()`); Postgres
+  RLS is row-level, not column-level, so a plain `admin_notes` column would be readable by *any*
+  query that customer's own session could construct, not just whatever the app's UI happens to
+  select. (This is distinct from `measurement_profiles.admin_notes`, which is deliberately
+  customer-visible — a "correction requested" message — not a private note; there was no existing
+  precedent in this codebase for a genuinely private per-order note before this.) `order_notes`
+  instead gets its own table with `for all using (is_admin()) with check (is_admin())`, the same
+  shape as `payment_transactions` — this closes the leak off structurally rather than relying on
+  the app never selecting the column. Verified live: the order's own owner (not just an unrelated
+  customer) gets zero rows back from `order_notes` under both a filtered and an unfiltered scan.
+- **`order_status_history` mirrors `production_status_history`'s exact shape** (status, note,
+  changed_by, created_at) and is what the customer-facing "order timeline" bullet is built from.
+  `updateOrderStatus` writes one row per status change and a `notifications` row in the same
+  action, so a single admin action satisfies three plan bullets at once: "status changes" (admin),
+  "order timeline" (customer), and "notifications" (customer) — without needing Module 15's full
+  multi-channel notification engine.
+- **`notifications` (schema from Module 1's `0009`) was real and unused before this module** — RLS
+  already supported owner-or-admin read, owner-or-admin update (for `read_at`), admin-only insert.
+  Module 12 is the first thing to actually write to it: `updateOrderStatus` (status-change
+  notifications) and `sendCustomerMessage` (the "customer communication" bullet — a free-text
+  in-app message tied to an order). Both use `channel: "in_app"` only; email/WhatsApp/SMS senders
+  and event-triggered templates are explicitly Module 15's "Notifications & Automation Engine".
+  `/account/notifications` (a `ComingSoon` stub since Module 2) is now real: list + per-item
+  mark-as-read, RLS-scoped to the signed-in customer.
+- **Admin write actions rely on RLS (`is_admin()`), not an in-action role re-check** — same
+  established pattern as `markPaymentPaidManually`/`updateEnquiryStatus`: `/admin` is already
+  gated by middleware + layout before any of these actions can be invoked from the UI, and the
+  regular RLS-respecting client enforces the real write authorization underneath. Unrestricted
+  status transitions (any of the 7 `orders.status` values, at any time) — a real state machine
+  (blocking e.g. `cancelled` → `pending`) is explicitly deferred to Module 13, per the user's own
+  call on this tradeoff.
+- **Verified live** via `scripts/test-orders.mjs` (two customers + an admin, cleaned up after):
+  cross-customer order/status-history/notification visibility: 0 rows both filtered and via a
+  blind unfiltered scan; a status change produces both a history row and a notification, each
+  correctly RLS-scoped to the owner; `order_notes` is unreachable by the order's own owner (not
+  just a stranger) under any query shape, while admin can read/write it; `sendToProduction`'s
+  idempotency is backed structurally (a second insert attempt is rejected by
+  `production_orders.order_id`'s own unique constraint, not just an app-level pre-check);
+  notification mark-as-read is owner-scoped (a non-owner's update affects 0 rows, not an error —
+  RLS silently filters rather than rejecting, so this was checked by asserting 0 rows affected and
+  the notification still unread afterward, not by expecting a thrown error).
+
 ## `lib/` layering
 
 - `lib/supabase/` — the only place Supabase clients are constructed. `client.ts` for Client

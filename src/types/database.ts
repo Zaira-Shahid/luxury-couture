@@ -346,6 +346,24 @@ export interface OrderItem {
   created_at: ISODateTime;
 }
 
+export interface OrderStatusHistoryEntry {
+  id: UUID;
+  order_id: UUID;
+  status: string;
+  note: string | null;
+  changed_by: UUID | null;
+  created_at: ISODateTime;
+}
+
+/** Admin-only, never customer-readable — see 0033's own comment. */
+export interface OrderNote {
+  id: UUID;
+  order_id: UUID;
+  note: string;
+  created_by: UUID | null;
+  created_at: ISODateTime;
+}
+
 export type PaymentType = "deposit" | "balance" | "full" | "refund";
 export type PaymentStatus = "pending" | "succeeded" | "failed" | "refunded";
 export type PaymentProvider = "stripe" | "paypal" | "manual";
