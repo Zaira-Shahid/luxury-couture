@@ -340,20 +340,35 @@ Quick reference for how this codebase is organized. For the full product roadmap
   "acceptance" column modeled, so accepting one is a legitimate, narrow use of the service-role
   client — scoped to exactly that one enforced transition (owner check + `status = 'sent'` guard
   against a double-accept race), not a general bypass.
-- **A checkout-specific redirect quirk, found and fixed, not shipped.** `/checkout`'s own
-  `redirect()` for a signed-out visitor produced a `200` with a client-side/meta-refresh redirect
-  instead of a clean `307` — `PageTransition` (Module 4, a client component wrapping every
-  `(storefront)` page) forces the response to start streaming before a nested page's `redirect()`
-  can run, so the HTTP status is already committed. The browser experience was still correct (the
-  embedded `NEXT_REDIRECT` digest navigates client-side, with a 1-second meta-refresh fallback),
-  but not equivalent to how `/account`/`/admin` already redirect. Fixed by gating `/checkout` in
-  middleware too, the same way — verified with a real production build (`next build && next
-  start`), since this is dev-mode-adjacent behavior that needed confirming outside dev mode.
-  **Not fixed everywhere**: the same characteristic likely affects other storefront `notFound()`/
-  `redirect()` calls from earlier modules (e.g. `products/[slug]`) — there's no data-leak risk
-  either way (RLS already governs what data is ever included), so this is a status-code/SEO
-  correctness question, not a security one, and fixing it site-wide is a separate, cross-cutting
-  pass rather than something to absorb into this module.
+- **A checkout redirect quirk, initially misdiagnosed, corrected in a dedicated follow-up pass.**
+  `/checkout`'s own `redirect()` for a signed-out visitor produced a `200` with a client-side/
+  meta-refresh redirect instead of a clean `307`. First diagnosis blamed `PageTransition` (Module
+  4's client component wrapping every `(storefront)` page) specifically. That was wrong: isolated
+  testing (a bare route with no client wrapper at all, `notFound()` moved into a layout instead of
+  a page, `export const dynamic = "force-dynamic"`) showed the **same** 200-status behavior in
+  every case — this is a general Next.js 15 App Router characteristic for *any* `notFound()`/
+  `redirect()` thrown during page/layout rendering, not something specific to client-component
+  boundaries. Re-checking the "working" baseline confirmed `/account`'s clean 307 was never the
+  layout's own `redirect()` proving anything — it's a genuinely separate, **middleware**-level
+  redirect (a 22-byte body, not a rendered page) that catches unauthenticated requests before any
+  React rendering starts; the layout's `redirect()` is a defense-in-depth fallback that had simply
+  never been exercised by any prior test. `/checkout` is now gated in middleware the same way.
+  There's no data-leak risk from any of this either way — RLS already governs what data is ever
+  included in a response; only the raw HTTP status code was ever wrong.
+  **Also fixed, in the same follow-up pass** (this affects all 11 `notFound()` call sites
+  site-wide, not just storefront ones — comprehensively fixing all of them would mean coupling
+  middleware to every domain entity, so scope was deliberately limited to the 3 *public* pages,
+  where the status code actually matters for SEO/crawlers; `(account)`/`(admin)` pages sit behind
+  auth and aren't crawled): `products/[slug]`, `collections/[slug]`, and
+  `checkout/confirmed/[orderNumber]` now get a genuine `404` via existence checks added directly in
+  `src/lib/supabase/middleware.ts`, returning a hand-built HTML response (inline styles — Edge
+  middleware can't reference the app's content-hashed compiled CSS or render `not-found.tsx`
+  directly) rather than relying on the page's own `notFound()`. The order-confirmation check
+  reuses the same RLS-scoped query as the page (owner-or-admin), so a wrong owner and a genuinely
+  nonexistent order number produce the identical outcome — no enumeration signal either way. The
+  page-level `notFound()` calls stay in place as defense in depth. Verified against a real
+  production build: invalid slugs/order numbers now 404, valid ones and the listing pages
+  (`/products`, `/collections`) still 200.
 - **A "gap" in my own plan that turned out not to exist.** I initially planned a migration to relax
   `order_items`' exactly-one-of-`product_id`/`builder_configuration_id` constraint, believing it
   matched `cart_items`' real constraint of the same shape. Checking `pg_constraint` directly before
