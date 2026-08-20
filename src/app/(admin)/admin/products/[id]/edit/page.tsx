@@ -35,6 +35,7 @@ export default async function EditProductPage({
     <div className="container max-w-3xl py-10">
       <h1 className="mb-6 font-heading text-2xl">Edit Product</h1>
       <ProductForm
+        key={`${product.id}-${product.updated_at}`}
         product={product as ProductWithImages}
         categories={categories}
         seo={seo ?? undefined}

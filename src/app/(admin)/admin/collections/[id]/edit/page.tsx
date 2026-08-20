@@ -35,6 +35,7 @@ export default async function EditCollectionPage({
     <div className="container max-w-3xl py-10">
       <h1 className="mb-6 font-heading text-2xl">Edit Collection</h1>
       <CollectionForm
+        key={`${collection.id}-${collection.updated_at}`}
         collection={collection as Collection}
         allProducts={(allProducts ?? []) as Product[]}
         selectedProductIds={(links ?? []).map((l) => l.product_id as string)}

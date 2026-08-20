@@ -25,6 +25,7 @@ export default async function EditMeasurementProfilePage({
 
   return (
     <MeasurementForm
+      key={`${result.profile.id}-${result.profile.updated_at}`}
       profile={result.profile}
       values={result.values}
       groups={groups}
