@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import { AddToCartButton } from "@/components/storefront/add-to-cart-button";
 import { CustomizeTeaser } from "@/components/storefront/customize-teaser";
 import { ProductCard } from "@/components/storefront/product-card";
 import { ProductEnquiryForm } from "@/components/storefront/product-enquiry-form";
@@ -85,7 +86,8 @@ export default async function ProductDetailPage({
             <p className="mt-6 text-muted-foreground">{product.description}</p>
           ) : null}
 
-          <div className="mt-6">
+          <div className="mt-6 flex items-center gap-3">
+            <AddToCartButton productId={product.id} />
             <WishlistButton
               productId={product.id}
               initiallyWishlisted={wishlistedIds.has(product.id)}

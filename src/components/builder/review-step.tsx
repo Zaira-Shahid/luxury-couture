@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -8,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { claimConfiguration, requestQuotation } from "@/features/builder/actions";
+import { addBuilderConfigurationToCart } from "@/features/cart/actions";
 
 export function ReviewStep({
   configId,
@@ -23,6 +25,7 @@ export function ReviewStep({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [claiming, startClaimTransition] = useTransition();
+  const [addingToCart, startAddToCart] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
@@ -34,6 +37,29 @@ export function ReviewStep({
         toast.error(result.error);
       } else {
         toast.success("Saved to your account.");
+        router.refresh();
+      }
+    });
+  }
+
+  function handleAddToCart() {
+    if (!configId) return;
+    startAddToCart(async () => {
+      // Cart items referencing a custom design require it to be claimed
+      // first — a guest cart has no token-based way to prove ownership of
+      // a design the way the builder's own share links do.
+      if (!isClaimed) {
+        if (!token) return;
+        const claimResult = await claimConfiguration(configId, token);
+        if ("error" in claimResult) {
+          toast.error(claimResult.error);
+          return;
+        }
+      }
+      const result = await addBuilderConfigurationToCart(configId);
+      if ("error" in result) toast.error(result.error);
+      else {
+        toast.success("Added to cart.");
         router.refresh();
       }
     });
@@ -84,6 +110,21 @@ export function ReviewStep({
             {claiming ? "Saving…" : "Save to My Account"}
           </Button>
         </div>
+      ) : null}
+
+      {configId ? (
+        isSignedIn ? (
+          <Button type="button" variant="outline" disabled={addingToCart} onClick={handleAddToCart} className="w-fit">
+            {addingToCart ? "Adding…" : "Add to Cart"}
+          </Button>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            <Link href="/login" className="text-primary underline-offset-4 hover:underline">
+              Sign in
+            </Link>{" "}
+            to add this design to your cart, or request a quotation below.
+          </p>
+        )
       ) : null}
 
       <form action={handleSubmit} className="flex flex-col gap-4">
