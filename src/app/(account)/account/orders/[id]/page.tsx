@@ -70,7 +70,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const detail = await getOrderDetail(id);
   if (!detail) notFound();
 
-  const { order, items, payments, statusHistory, production, productionHistory, shipping, address } = detail;
+  const { order, items, payments, statusHistory, production, productionHistory, shipping, shippingEvents, address } =
+    detail;
   const pendingPayments = payments.filter((p) => p.status === "pending");
 
   const timeline = [
@@ -85,6 +86,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       label: PRODUCTION_STATUS_LABELS[entry.status] ?? entry.status,
       note: entry.note,
       createdAt: entry.created_at,
+    })),
+    ...shippingEvents.map((entry) => ({
+      id: entry.id,
+      label: SHIPPING_STATUS_LABELS[entry.status] ?? entry.status,
+      note: entry.description,
+      createdAt: entry.occurred_at,
     })),
   ].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 
@@ -173,6 +180,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 <span className="text-muted-foreground">Shipping status</span>
                 <span>
                   {SHIPPING_STATUS_LABELS[shipping.status] ?? shipping.status}
+                  {shipping.courier ? ` via ${shipping.courier}` : ""}
                   {shipping.tracking_number ? ` · ${shipping.tracking_number}` : ""}
                 </span>
               </div>

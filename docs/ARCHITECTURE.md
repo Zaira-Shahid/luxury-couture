@@ -587,6 +587,54 @@ Quick reference for how this codebase is organized. For the full product roadmap
   advancement). Re-ran `scripts/test-orders.mjs` and `scripts/test-payments.mjs` afterward with no
   regressions.
 
+## Shipping & Tracking (Module 14)
+
+- **Free-first provider abstraction, same shape as payments (Module 11) and chat (Module 9).**
+  `lib/shipping/provider.ts` defines one `ShippingProvider` interface (`createShipment`);
+  `MockShippingProvider` is the only implementation — a flat-by-destination rate rule (UK vs.
+  international), not a real rates engine, matching the plan's own "Development: mock shipping
+  rates, mock tracking" scope. A real courier (Royal Mail, DHL, a rates API) is explicitly **not
+  implemented** — architecturally supported only, same deferral as Module 11's PayPal decision (no
+  real courier credentials exist to integrate against).
+- **`shipping_orders.shipping_cost` stays informational, never charged to the customer.** Modules
+  10/11 already finalized `orders.total_amount` at order-creation time with no shipping line item,
+  and payments are derived strictly from that total. Retrofitting checkout to add a shipping charge
+  after the fact would touch already-verified invariants for a module whose actual bullets are
+  about rates/tracking mechanics, not billing — the mock cost is recorded for admin visibility
+  only, shown on `/admin/shipping/[id]` labeled explicitly as "not charged to customer."
+- **No RBAC changes this module** — unlike Module 13, no shipping-specific staff role exists in the
+  plan or the `UserRole` enum, so `shipping_orders`/`shipping_events` stay `is_admin()`-only via
+  their original Module 1 (`0008`) policies. No new migration was needed at all for this module —
+  every column the build needed (`courier`, `tracking_number`, `status`, `shipping_cost`,
+  `shipped_at`, `delivered_at`, `shipping_events.description`/`occurred_at`) already existed.
+- **No dedicated "tracking page" route** — extending `/account/orders/[id]` instead, the same move
+  Module 13 made for production: `shipping_events` is now a third source merged into that page's
+  combined timeline (alongside `order_status_history` and `production_status_history`, all sorted
+  together by timestamp), and the existing "Production & Shipping" summary card now shows the real
+  courier and tracking number instead of placeholder nulls.
+- **Shipment creation is independent of `production_orders`.** A plain product order (no custom
+  `builder_configuration` items) never gets a `production_orders` row at all, but still needs
+  shipping — `/admin/orders/[id]`'s new "Create Shipment" card is gated only on `!shipping`, not on
+  production state, mirroring the same idempotent-creation shape as Module 12's "Send to
+  Production" (existence-checked first, backed by `shipping_orders.order_id`'s own unique
+  constraint as the structural backstop either way).
+- **`shipped_at`/`delivered_at` are set automatically on the relevant transitions**, not left for
+  the admin to fill in by hand: `advanceShippingStatus` sets `shipped_at` the first time status
+  leaves `pending`, and `delivered_at` when status first reaches `delivered` — verified live via
+  both transitions in sequence, confirming `shipped_at` isn't reset by a later `delivered_at` set.
+- **The `DetailsForm` (courier/tracking number, `/admin/shipping/[id]/details-form.tsx`) applied
+  the Base UI `Input` remount-key fix from the moment it was written** (`key={`${shipping.id}-${shipping.updated_at}`}`
+  at the page level) — it has the identical shape (`Input` + `defaultValue` from server data, its
+  update action revalidates the same page) as the five forms that needed a follow-up patch for this
+  exact issue earlier in the project.
+- **Verified live** via `scripts/test-shipping.mjs` (two customers + an admin, cleaned up after):
+  create-shipment idempotency backed by the real unique constraint; cross-customer RLS on
+  `shipping_orders` (filtered and via an unfiltered blind scan); a customer can neither change
+  shipping status nor insert a tracking event; a status advance produces a customer-visible
+  tracking event and notification, with `shipped_at`/`delivered_at` set correctly on their
+  respective transitions. Re-ran Modules 12's and 13's own verification scripts afterward — both
+  still pass, confirming this module's (much smaller, no-new-RLS) changes didn't regress either.
+
 ## `lib/` layering
 
 - `lib/supabase/` — the only place Supabase clients are constructed. `client.ts` for Client

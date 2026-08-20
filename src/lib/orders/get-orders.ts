@@ -9,6 +9,7 @@ import type {
   Payment,
   ProductionOrder,
   ProductionStatusHistoryEntry,
+  ShippingEvent,
   ShippingOrder,
 } from "@/types/database";
 
@@ -22,6 +23,7 @@ export type OrderDetail = {
   production: ProductionOrder | null;
   productionHistory: ProductionStatusHistoryEntry[];
   shipping: ShippingOrder | null;
+  shippingEvents: ShippingEvent[];
   address: Address | null;
 };
 
@@ -103,6 +105,11 @@ export async function getOrderDetail(id: string): Promise<OrderDetail | null> {
         .order("created_at")
     : null;
 
+  const shipping = (shippingResult.data ?? null) as ShippingOrder | null;
+  const shippingEventsResult = shipping
+    ? await supabase.from("shipping_events").select("*").eq("shipping_order_id", shipping.id).order("occurred_at")
+    : null;
+
   return {
     order,
     items: (itemsResult.data ?? []) as OrderItem[],
@@ -110,7 +117,8 @@ export async function getOrderDetail(id: string): Promise<OrderDetail | null> {
     statusHistory: (historyResult.data ?? []) as OrderStatusHistoryEntry[],
     production,
     productionHistory: (productionHistoryResult?.data ?? []) as ProductionStatusHistoryEntry[],
-    shipping: (shippingResult.data ?? null) as ShippingOrder | null,
+    shipping,
+    shippingEvents: (shippingEventsResult?.data ?? []) as ShippingEvent[],
     address: (addressResult?.data ?? null) as Address | null,
   };
 }

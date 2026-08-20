@@ -1085,7 +1085,14 @@ Create status history.
 
 # MODULE 14 — SHIPPING & TRACKING
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
+
+(Mock rates are a flat UK-vs-international rule, not a real rates engine; a real courier API is
+architecturally supported by the ShippingProvider interface but not implemented, same deferral as
+Module 11's PayPal decision. shipping_cost is recorded for admin visibility only, never charged to
+the customer — Modules 10/11 already finalized order totals with no shipping line item. No
+dedicated "customer tracking page" route — shipping_events was folded into the existing merged
+order timeline on /account/orders/[id] instead, the same move Module 13 made for production.)
 
 Build shipping abstraction.
 
@@ -2572,12 +2579,12 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULE 13 COMPLETE`
+`MODULE 14 COMPLETE`
 
 Current Module:
 
-`MODULE 13 — COMPLETE`
+`MODULE 14 — COMPLETE`
 
 Next Action:
 
-`Start Module 14`
+`Start Module 15`
