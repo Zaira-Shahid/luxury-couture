@@ -1,6 +1,7 @@
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
 import { PageTransition } from "@/components/motion/page-transition";
+import { ChatWidget } from "@/lib/chat";
 
 export default function StorefrontLayout({
   children,
@@ -14,6 +15,7 @@ export default function StorefrontLayout({
         <PageTransition>{children}</PageTransition>
       </main>
       <SiteFooter />
+      <ChatWidget />
     </div>
   );
 }
