@@ -24,12 +24,13 @@ const resp = await fetch(APP_URL + "/");
 const html = await resp.text();
 
 const checks = [
-  // KNOWN PRE-EXISTING FAILURE (not caused by Module 19): the homepage's own
-  // generateMetadata returns `title: settings.homepage.seoTitle ?? undefined`,
-  // and an explicit `undefined` OVERRIDES the root layout's title.default in
-  // Next.js rather than inheriting it — so with homepage.seo_title unset the
-  // page renders NO <title> tag at all. Verified against a clean checkout with
-  // this module's changes stashed. Belongs to the SEO module, not here.
+  // FIXED in Module 20 Pass 1. This previously failed: the homepage returned
+  // `title: settings.homepage.seoTitle ?? undefined`, and an explicit
+  // `undefined` OVERRIDES the root layout's title.default in Next.js rather
+  // than inheriting it, so with homepage.seo_title unset the page rendered no
+  // <title> at all. The homepage now goes through `buildMetadata`, which
+  // always resolves a real title down the chain
+  // (page -> seo.default_title -> siteConfig.name).
   ["title reflects seo.default_title", html.includes("Module3TestTitle")],
   ["footer contact email renders", html.includes("module3-test@example.com")],
 ];

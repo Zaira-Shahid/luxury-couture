@@ -2,11 +2,18 @@ import type { Metadata } from "next";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { WhatsAppCta } from "@/components/storefront/whatsapp-cta";
+import { buildMetadata } from "@/lib/seo/build-metadata";
 import { getSiteSettings } from "@/lib/settings/get-site-settings";
 
 import { ContactForm } from "./contact-form";
 
-export const metadata: Metadata = { title: "Contact" };
+export async function generateMetadata(): Promise<Metadata> {
+  return buildMetadata({
+    title: "Contact",
+    description: "Get in touch about a piece, an order, or a bespoke commission.",
+    path: "/contact",
+  });
+}
 
 export default async function ContactPage() {
   const settings = await getSiteSettings();

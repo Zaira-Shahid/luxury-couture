@@ -38,6 +38,17 @@ export type SiteSettings = {
     defaultTitle: string | null;
     defaultDescription: string | null;
     defaultOgImageUrl: string | null;
+    /** "@handle" used for Twitter/X card attribution. */
+    twitterHandle: string | null;
+    /** Google Search Console HTML-tag verification token. */
+    googleSiteVerification: string | null;
+    /**
+     * Master switch for search indexing. Defaults to false so a
+     * pre-launch/staging deploy is never indexed by accident — the owner
+     * turns it on in Admin → SEO when the site goes live. Drives both
+     * `robots.txt` and every page's robots meta tag.
+     */
+    indexingEnabled: boolean;
   };
   homepage: {
     seoTitle: string | null;
@@ -58,7 +69,14 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
     contactAddress: null,
     footerText: null,
   },
-  seo: { defaultTitle: null, defaultDescription: null, defaultOgImageUrl: null },
+  seo: {
+    defaultTitle: null,
+    defaultDescription: null,
+    defaultOgImageUrl: null,
+    twitterHandle: null,
+    googleSiteVerification: null,
+    indexingEnabled: false,
+  },
   homepage: {
     seoTitle: null,
     seoDescription: null,

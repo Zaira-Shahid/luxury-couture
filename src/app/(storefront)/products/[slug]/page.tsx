@@ -7,9 +7,17 @@ import { ProductCard } from "@/components/storefront/product-card";
 import { ProductEnquiryForm } from "@/components/storefront/product-enquiry-form";
 import { ProductReviews, RatingSummary } from "@/components/storefront/product-reviews";
 import { ScrollReveal } from "@/components/motion/scroll-reveal";
+import { Breadcrumbs } from "@/components/seo/breadcrumbs";
+import { JsonLd } from "@/components/seo/json-ld";
 import { WishlistButton } from "@/components/storefront/wishlist-button";
 import { getAuthUser } from "@/lib/auth/session";
 import { getProductBySlug, getRelatedProducts } from "@/lib/catalog/get-products";
+import { siteConfig } from "@/lib/config/site";
+import { getProductRatingSummary } from "@/lib/reviews/get-reviews";
+import { buildMetadata } from "@/lib/seo/build-metadata";
+import { getSeoMetadata } from "@/lib/seo/get-seo-metadata";
+import { productSchema } from "@/lib/seo/structured-data";
+import { getSiteSettings } from "@/lib/settings/get-site-settings";
 import { getWishlistedProductIds } from "@/lib/wishlist/get-wishlist";
 
 function formatPrice(amount: number, currency: string) {
@@ -23,7 +31,19 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const product = await getProductBySlug(slug);
-  return { title: product?.name ?? "Product" };
+  if (!product) return { title: "Product" };
+
+  const overrides = await getSeoMetadata("product", product.id);
+  const primaryImage =
+    product.product_images.find((img) => img.is_primary) ?? product.product_images[0];
+
+  return buildMetadata({
+    title: product.name,
+    description: product.description,
+    image: primaryImage?.url,
+    path: `/products/${product.slug}`,
+    overrides,
+  });
 }
 
 export default async function ProductDetailPage({
@@ -35,10 +55,14 @@ export default async function ProductDetailPage({
   const product = await getProductBySlug(slug);
   if (!product) notFound();
 
-  const [related, user, wishlistedIds] = await Promise.all([
+  const [related, user, wishlistedIds, rating, settings] = await Promise.all([
     getRelatedProducts(product),
     getAuthUser(),
     getWishlistedProductIds(),
+    // Reused from Module 18 — already React-cached, so the visible
+    // RatingSummary below does not re-query for this.
+    getProductRatingSummary(product.id),
+    getSiteSettings(),
   ]);
 
   const images = [...product.product_images].sort((a, b) => {
@@ -48,6 +72,27 @@ export default async function ProductDetailPage({
 
   return (
     <div className="container py-16">
+      <JsonLd
+        data={productSchema({
+          name: product.name,
+          description: product.description,
+          path: `/products/${product.slug}`,
+          sku: product.sku,
+          images: images.map((img) => img.url),
+          price: product.base_price,
+          currency: product.currency,
+          brandName: settings.seo.defaultTitle ?? siteConfig.name,
+          rating,
+        })}
+      />
+      <Breadcrumbs
+        className="mb-8"
+        items={[
+          { name: "Home", path: "/" },
+          { name: "Products", path: "/products" },
+          { name: product.name, path: `/products/${product.slug}` },
+        ]}
+      />
       <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
         <div className="flex flex-col gap-3">
           <div className="aspect-[3/4] overflow-hidden rounded-xl bg-muted">

@@ -1001,7 +1001,51 @@ Quick reference for how this codebase is organized. For the full product roadmap
   all**. Confirmed against a clean checkout with this module's changes stashed, so it is not a
   Module 19 regression. `scripts/test-settings-render.mjs` still asserts it (and still fails) on
   purpose, annotated in place, rather than deleting a check that exposes a genuine defect. Belongs
-  to the SEO module.
+  to the SEO module. **Fixed in Module 20 Pass 1** — the homepage now routes through
+  `buildMetadata`, which always resolves a real title, and that check now passes.
+
+## SEO Foundation — Pass 1 (Module 20)
+
+Everything public-facing now emits real metadata. The design goal was **one** place where
+canonical/OG/Twitter rules live, so no page can drift.
+
+- `lib/seo/build-metadata.ts` — `buildMetadata()` is the single entry point every public page's
+  `generateMetadata` calls. It resolves each field down a fixed precedence chain: **admin
+  `seo_metadata` override → the entity's own field → `site_settings` defaults → `siteConfig`**.
+  Because the last link is a hardcoded constant, a title/description can never come out empty —
+  which is exactly what fixed the missing-`<title>` bug above.
+- `lib/seo/urls.ts` — `absoluteUrl()`/`absoluteAssetUrl()`. Canonicals, OG tags, JSON-LD and the
+  sitemap all require absolute URLs, so they all funnel through here and `NEXT_PUBLIC_SITE_URL`
+  stays the single place the deployed origin is configured. Note Next.js normalises a root
+  canonical against `metadataBase` and drops the trailing slash (`http://host/` → `http://host`) —
+  expected, not a bug.
+- `lib/seo/structured-data.ts` — pure JSON-LD builders (Organization, WebSite, Product,
+  BreadcrumbList, FAQPage, BlogPosting). No React, no DB: plain data in, plain object out. They
+  `compact()` away empty fields and **omit rather than invent** — `aggregateRating` is only emitted
+  when real reviews exist, since fabricating one is both a Google penalty and a lie.
+- `lib/seo/get-seo-metadata.ts` — reads the polymorphic `seo_metadata` table created back in
+  Module 1 (`entity_type` + `entity_id`, unique together) that nothing had consumed until now.
+  `SEO_ENTITY_TYPES` is the app-side allow-list so a typo can't write rows nothing reads back.
+- `components/seo/json-ld.tsx` — escapes `<` to `<` before injecting. Without this a product
+  name containing `</script>` breaks out of the JSON-LD block into executable markup; there's a
+  regression test for exactly that.
+- `components/seo/breadcrumbs.tsx` — renders the visible trail *and* emits `BreadcrumbList`, so one
+  component covers both the internal-linking and structured-data requirements.
+- `app/sitemap.ts` / `app/robots.ts` — Next.js metadata routes. The sitemap reads through the same
+  cached catalog helpers the storefront uses, so it can never list a product the storefront
+  wouldn't render (both filtered by `status = 'published'` / `is_active`, with RLS underneath).
+- **`seo.indexingEnabled` defaults to `false`.** Until the owner turns it on in Admin → SEO,
+  `robots.txt` blocks everything *and* every page carries `noindex` — robots.txt alone does not
+  remove already-known URLs from an index, so both are needed. This is deliberate: a staging or
+  pre-launch deploy must never be crawled by accident. **Remember to enable it at launch.**
+- Both new settings keys (`seo.indexing_enabled`, `seo.google_site_verification`,
+  `seo.twitter_handle`) needed **no migration** — `site_settings` is a key/value table, so they are
+  just new cases in `applyRow`.
+- **Verified live** via `scripts/test-seo-pass1.mjs` (57 checks, self-cleaning, exits non-zero on
+  failure): sitemap contents including the negative cases (a draft product and every private path
+  must be absent), robots.txt in *both* indexing states, canonical/OG/Twitter tags, JSON-LD
+  validity and field-level correctness, the override precedence chain, and the `</script>`
+  escaping.
 
 ## `lib/` layering
 
