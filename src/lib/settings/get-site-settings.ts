@@ -21,12 +21,6 @@ function applyRow(settings: SiteSettings, row: Row) {
     case "branding.favicon_url":
       settings.branding.faviconUrl = typeof row.value === "string" ? row.value : null;
       break;
-    case "store.announcement_enabled":
-      settings.store.announcementEnabled = row.value === true;
-      break;
-    case "store.announcement_text":
-      settings.store.announcementText = typeof row.value === "string" ? row.value : null;
-      break;
     case "store.social_links":
       settings.store.socialLinks =
         row.value && typeof row.value === "object" ? (row.value as SocialLinks) : {};

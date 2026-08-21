@@ -2,23 +2,23 @@ import Link from "next/link";
 
 import { siteConfig } from "@/lib/config/site";
 import { getAuthUser } from "@/lib/auth/session";
+import { getCurrentBanner } from "@/lib/admin/get-banners";
 import { getCartItemCount } from "@/lib/cart/get-cart";
 import { getSiteSettings } from "@/lib/settings/get-site-settings";
 
 import { AnnouncementBar } from "./announcement-bar";
 
 export async function SiteHeader() {
-  const [user, settings, cartCount] = await Promise.all([
+  const [user, settings, cartCount, banner] = await Promise.all([
     getAuthUser(),
     getSiteSettings(),
     getCartItemCount(),
+    getCurrentBanner(),
   ]);
 
   return (
     <>
-      {settings.store.announcementEnabled && settings.store.announcementText ? (
-        <AnnouncementBar text={settings.store.announcementText} />
-      ) : null}
+      {banner ? <AnnouncementBar text={banner.text} linkUrl={banner.link_url} /> : null}
       <header className="border-b border-border bg-background">
         <div className="container flex h-16 items-center justify-between">
           <Link href="/" className="flex items-center font-heading text-xl tracking-wide">

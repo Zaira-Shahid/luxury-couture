@@ -586,6 +586,42 @@ export interface LoyaltyTransaction {
   created_at: ISODateTime;
 }
 
+export interface NewsletterSubscriber {
+  id: UUID;
+  email: string;
+  source: string | null;
+  subscribed_at: ISODateTime;
+  unsubscribed_at: ISODateTime | null;
+  unsubscribe_token: UUID;
+}
+
+export type CampaignTarget = "all_subscribers" | "vip_customers" | "new_customers" | "at_risk_customers";
+export type CampaignStatus = "draft" | "sent";
+
+export interface Campaign {
+  id: UUID;
+  subject: string;
+  body: string;
+  target: CampaignTarget;
+  status: CampaignStatus;
+  recipient_count: number | null;
+  sent_at: ISODateTime | null;
+  created_at: ISODateTime;
+  updated_at: ISODateTime;
+}
+
+export interface PromotionalBanner {
+  id: UUID;
+  text: string;
+  link_url: string | null;
+  starts_at: ISODateTime | null;
+  expires_at: ISODateTime | null;
+  is_active: boolean;
+  sort_order: number;
+  created_at: ISODateTime;
+  updated_at: ISODateTime;
+}
+
 // ---- Content, SEO, media -------------------------------------------------
 
 export type ContentStatus = "draft" | "published";

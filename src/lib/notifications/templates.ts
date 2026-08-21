@@ -167,3 +167,17 @@ export function reviewRequestTemplate(orderNumber: string): NotificationTemplate
     body: `We'd love to hear your thoughts on order ${orderNumber} — leave us a review whenever you're ready.`,
   };
 }
+
+/**
+ * Only fires for signed-in customers — a guest cart has no captured
+ * contact info anywhere in the schema, so there's genuinely nowhere to
+ * send a recovery email for one (the abandon-carts cron still marks a
+ * guest cart's status correctly either way, just skips the notification).
+ */
+export function abandonedCartTemplate(siteUrl: string): NotificationTemplate {
+  return {
+    type: "abandoned_cart",
+    title: "You left something in your cart",
+    body: `Your cart is still waiting for you — pick up where you left off at ${siteUrl}/cart.`,
+  };
+}

@@ -3,13 +3,21 @@
 import { X } from "lucide-react";
 import { useState } from "react";
 
-export function AnnouncementBar({ text }: { text: string }) {
+export function AnnouncementBar({ text, linkUrl }: { text: string; linkUrl: string | null }) {
   const [dismissed, setDismissed] = useState(false);
   if (dismissed) return null;
 
+  const content = linkUrl ? (
+    <a href={linkUrl} className="hover:underline">
+      {text}
+    </a>
+  ) : (
+    <p>{text}</p>
+  );
+
   return (
     <div className="relative flex items-center justify-center bg-primary px-8 py-2 text-center text-xs font-medium text-primary-foreground">
-      <p>{text}</p>
+      {content}
       <button
         type="button"
         onClick={() => setDismissed(true)}
