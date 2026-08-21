@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 
 import { logger } from "@/lib/logger";
+import { pointsEarnedForPayment } from "@/lib/loyalty/config";
 import { notify } from "@/lib/notifications/notify";
 import { depositPaidTemplate } from "@/lib/notifications/templates";
 import { getStripeClient } from "@/lib/payments/stripe-client";
@@ -69,6 +70,14 @@ export async function POST(request: NextRequest) {
             profileId: order.customer_id,
             email: authUser?.user?.email,
             ...depositPaidTemplate(order.order_number, payment.type, payment.amount, payment.currency),
+          });
+
+          // Idempotent via reference — a retried webhook delivery for the
+          // same payment is a no-op, not a double award (0041).
+          await admin.rpc("earn_loyalty_points", {
+            p_customer_id: order.customer_id,
+            p_points: pointsEarnedForPayment(payment.amount),
+            p_reference: `payment:${paymentId}`,
           });
         }
       } else {

@@ -15,6 +15,8 @@ const NAV_ITEMS = [
   { href: "/account/consultations", label: "Consultations" },
   { href: "/account/notifications", label: "Notifications" },
   { href: "/account/payments", label: "Payments" },
+  { href: "/account/loyalty", label: "Loyalty" },
+  { href: "/account/referrals", label: "Referrals" },
 ] as const;
 
 export function AccountNav() {

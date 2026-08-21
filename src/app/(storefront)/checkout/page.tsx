@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAuthUser } from "@/lib/auth/session";
 import { getCart } from "@/lib/cart/get-cart";
+import { getMyLoyaltyAccount } from "@/lib/loyalty/get-loyalty";
 import { createClient } from "@/lib/supabase/server";
 import type { Address, MeasurementProfile } from "@/types/database";
 
@@ -26,9 +27,10 @@ export default async function CheckoutPage() {
   if (items.length === 0) redirect("/cart");
 
   const supabase = await createClient();
-  const [{ data: addresses }, { data: measurementProfiles }] = await Promise.all([
+  const [{ data: addresses }, { data: measurementProfiles }, { account: loyaltyAccount }] = await Promise.all([
     supabase.from("addresses").select("*").eq("customer_id", user.id).order("is_default", { ascending: false }),
     supabase.from("measurement_profiles").select("*").eq("customer_id", user.id),
+    getMyLoyaltyAccount(),
   ]);
 
   const requiresMeasurements = items.some((item) => item.builder_configuration_id);
@@ -64,6 +66,8 @@ export default async function CheckoutPage() {
             addresses={(addresses ?? []) as Address[]}
             measurementProfiles={(measurementProfiles ?? []) as MeasurementProfile[]}
             requiresMeasurements={requiresMeasurements}
+            estimatedSubtotal={total}
+            loyaltyPointsBalance={loyaltyAccount?.points_balance ?? 0}
           />
         </CardContent>
       </Card>

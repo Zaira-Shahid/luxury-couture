@@ -357,6 +357,9 @@ export interface Order {
   deposit_paid_amount: number;
   balance_due_amount: number;
   total_amount: number;
+  discount_amount: number;
+  coupon_id: UUID | null;
+  loyalty_points_redeemed: number;
   currency: string;
   notes: string | null;
   created_at: ISODateTime;

@@ -6,7 +6,13 @@ import { RegisterForm } from "./register-form";
 
 export const metadata: Metadata = { title: "Create an account" };
 
-export default function RegisterPage() {
+export default async function RegisterPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ ref?: string }>;
+}) {
+  const { ref } = await searchParams;
+
   return (
     <Card className="w-full max-w-sm">
       <CardHeader>
@@ -14,7 +20,7 @@ export default function RegisterPage() {
         <CardDescription>Save your measurements, orders, and wishlist.</CardDescription>
       </CardHeader>
       <CardContent>
-        <RegisterForm />
+        <RegisterForm referralCode={ref ?? ""} />
       </CardContent>
     </Card>
   );

@@ -5,7 +5,15 @@ import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAdminCustomerDetail } from "@/lib/admin/get-customers";
 
+import { AdjustLoyaltyForm } from "./adjust-loyalty-form";
+import { CompleteReferralForm } from "./complete-referral-form";
+
 export const metadata: Metadata = { title: "Customer" };
+
+const REFERRAL_STATUS_LABELS: Record<string, string> = {
+  pending: "Pending",
+  completed: "Completed",
+};
 
 const ORDER_STATUS_LABELS: Record<string, string> = {
   pending: "Pending",
@@ -38,7 +46,7 @@ export default async function AdminCustomerDetailPage({ params }: { params: Prom
   const detail = await getAdminCustomerDetail(id);
   if (!detail) notFound();
 
-  const { profile, email, orders, quotations, addresses } = detail;
+  const { profile, email, orders, quotations, addresses, loyaltyAccount, referrals } = detail;
 
   return (
     <div className="container flex flex-col gap-6 py-10">
@@ -115,6 +123,44 @@ export default async function AdminCustomerDetailPage({ params }: { params: Prom
               {addresses.map((address) => (
                 <li key={address.id}>
                   {address.recipient_name}, {address.line1}, {address.city} {address.postal_code}, {address.country}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Loyalty Points</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <p className="text-sm">
+            Balance: <span className="font-medium">{loyaltyAccount?.points_balance ?? 0}</span>
+          </p>
+          <AdjustLoyaltyForm customerId={profile.id} />
+        </CardContent>
+      </Card>
+
+      {referrals.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Referrals</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="flex flex-col gap-3 text-sm">
+              {referrals.map((referral) => (
+                <li key={referral.id} className="flex flex-col gap-2 rounded-lg border border-border p-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="font-medium">{referral.code}</span>
+                    <span className="text-muted-foreground">
+                      {REFERRAL_STATUS_LABELS[referral.status] ?? referral.status}
+                      {referral.reward_amount ? ` · £${Number(referral.reward_amount).toFixed(2)}` : ""}
+                    </span>
+                  </div>
+                  {referral.status === "pending" && referral.referred_customer_id ? (
+                    <CompleteReferralForm referralId={referral.id} />
+                  ) : null}
                 </li>
               ))}
             </ul>

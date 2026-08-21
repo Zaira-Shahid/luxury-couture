@@ -1278,7 +1278,13 @@ Admin moderation required.
 
 # MODULE 19 — MARKETING & CUSTOMER RETENTION
 
-Status: [ ] NOT STARTED
+Status: [~] IN PROGRESS — Pass 1 of 2 complete
+
+(Split into two passes by explicit agreement. Pass 1 — done: coupons/discounts, loyalty points,
+referral program, the checkout/payment-linked features. Pass 2 — not started: customer segments,
+campaigns, newsletter unsubscribe, promotional banners, and the abandoned-cart cron job. Referral
+completion is admin-triggered, not automatic on the referred customer's first order — an explicit,
+approved scope call, avoiding a new hook into placeOrder for a low-frequency feature.)
 
 Implement architecture for:
 

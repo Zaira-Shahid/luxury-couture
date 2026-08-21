@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { logger } from "@/lib/logger";
+import { pointsEarnedForPayment } from "@/lib/loyalty/config";
 import { notify } from "@/lib/notifications/notify";
 import { balanceDueTemplate, depositPaidTemplate } from "@/lib/notifications/templates";
 import { getPaymentProvider } from "@/lib/payments";
@@ -40,6 +41,12 @@ export async function markPaymentPaidManually(paymentId: string): Promise<Action
     await notify(supabase, {
       profileId: order.customer_id,
       ...depositPaidTemplate(order.order_number, payment.type, payment.amount, payment.currency),
+    });
+
+    await supabase.rpc("earn_loyalty_points", {
+      p_customer_id: order.customer_id,
+      p_points: pointsEarnedForPayment(payment.amount),
+      p_reference: `payment:${paymentId}`,
     });
   }
 
