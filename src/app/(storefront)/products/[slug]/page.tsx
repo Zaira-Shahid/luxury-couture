@@ -9,6 +9,7 @@ import { ProductReviews, RatingSummary } from "@/components/storefront/product-r
 import { ScrollReveal } from "@/components/motion/scroll-reveal";
 import { Breadcrumbs } from "@/components/seo/breadcrumbs";
 import { JsonLd } from "@/components/seo/json-ld";
+import { StorefrontImage } from "@/components/shared/storefront-image";
 import { WishlistButton } from "@/components/storefront/wishlist-button";
 import { getAuthUser } from "@/lib/auth/session";
 import { getProductBySlug, getRelatedProducts } from "@/lib/catalog/get-products";
@@ -95,13 +96,16 @@ export default async function ProductDetailPage({
       />
       <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
         <div className="flex flex-col gap-3">
-          <div className="aspect-[3/4] overflow-hidden rounded-xl bg-muted">
+          <div className="relative aspect-[3/4] overflow-hidden rounded-xl bg-muted">
             {images[0] ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <StorefrontImage
                 src={images[0].url}
                 alt={images[0].alt_text ?? product.name}
-                className="size-full object-cover"
+                sizes="(min-width: 1024px) 50vw, 100vw"
+                // The main product shot is the largest-contentful element
+                // on this page — load it eagerly rather than lazily.
+                priority
+                className="object-cover"
               />
             ) : (
               <div className="size-full bg-gradient-to-br from-secondary to-muted" />
@@ -110,12 +114,15 @@ export default async function ProductDetailPage({
           {images.length > 1 ? (
             <div className="grid grid-cols-4 gap-3">
               {images.slice(1).map((img) => (
-                <div key={img.id} className="aspect-square overflow-hidden rounded-lg bg-muted">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
+                <div
+                  key={img.id}
+                  className="relative aspect-square overflow-hidden rounded-lg bg-muted"
+                >
+                  <StorefrontImage
                     src={img.url}
                     alt={img.alt_text ?? product.name}
-                    className="size-full object-cover"
+                    sizes="(min-width: 1024px) 12vw, 25vw"
+                    className="object-cover"
                   />
                 </div>
               ))}

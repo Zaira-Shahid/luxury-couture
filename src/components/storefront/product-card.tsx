@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { StorefrontImage } from "@/components/shared/storefront-image";
 import type { ProductWithImages } from "@/lib/catalog/get-products";
 
 function formatPrice(amount: number, currency: string) {
@@ -12,13 +13,13 @@ export function ProductCard({ product }: { product: ProductWithImages }) {
 
   return (
     <Link href={`/products/${product.slug}`} className="group block">
-      <div className="aspect-[3/4] overflow-hidden rounded-lg bg-muted">
+      <div className="relative aspect-[3/4] overflow-hidden rounded-lg bg-muted">
         {primaryImage ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <StorefrontImage
             src={primaryImage.url}
             alt={primaryImage.alt_text ?? product.name}
-            className="size-full object-cover transition-transform duration-500 group-hover:scale-105"
+            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
+            className="object-cover transition-transform duration-500 group-hover:scale-105"
           />
         ) : (
           <div className="size-full bg-gradient-to-br from-secondary to-muted" />

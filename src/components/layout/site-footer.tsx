@@ -1,4 +1,7 @@
+import Link from "next/link";
+
 import { siteConfig } from "@/lib/config/site";
+import { getPublishedPages } from "@/lib/content/get-content";
 import { getSiteSettings } from "@/lib/settings/get-site-settings";
 
 const SOCIAL_LABELS = {
@@ -8,8 +11,26 @@ const SOCIAL_LABELS = {
   whatsapp: "WhatsApp",
 } as const;
 
+/**
+ * Static footer destinations. CMS pages are appended to these at render
+ * time, which is the internal-linking half of Module 20 — every published
+ * page gets a crawlable link from every page of the site.
+ */
+const SHOP_LINKS = [
+  { href: "/products", label: "Shop All" },
+  { href: "/collections", label: "Collections" },
+  { href: "/builder", label: "Custom Builder" },
+];
+
+const HELP_LINKS = [
+  { href: "/consultations", label: "Book a Consultation" },
+  { href: "/faq", label: "FAQ" },
+  { href: "/blog", label: "Journal" },
+  { href: "/contact", label: "Contact" },
+];
+
 export async function SiteFooter() {
-  const settings = await getSiteSettings();
+  const [settings, pages] = await Promise.all([getSiteSettings(), getPublishedPages()]);
   const socialEntries = Object.entries(settings.store.socialLinks).filter(([, url]) => url);
   const hasContact =
     settings.store.contactEmail || settings.store.contactPhone || settings.store.contactAddress;
@@ -17,7 +38,40 @@ export async function SiteFooter() {
   return (
     <footer className="border-t border-border bg-background">
       <div className="container flex flex-col gap-6 py-10 text-sm text-muted-foreground">
-        <div className="flex flex-col gap-6 sm:flex-row sm:justify-between">
+        <nav aria-label="Footer" className="grid grid-cols-2 gap-6 sm:grid-cols-3">
+          <div className="flex flex-col gap-2">
+            <p className="font-medium text-foreground">Shop</p>
+            {SHOP_LINKS.map((link) => (
+              <Link key={link.href} href={link.href} className="transition-colors hover:text-foreground">
+                {link.label}
+              </Link>
+            ))}
+          </div>
+          <div className="flex flex-col gap-2">
+            <p className="font-medium text-foreground">Help</p>
+            {HELP_LINKS.map((link) => (
+              <Link key={link.href} href={link.href} className="transition-colors hover:text-foreground">
+                {link.label}
+              </Link>
+            ))}
+          </div>
+          {pages.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              <p className="font-medium text-foreground">About</p>
+              {pages.map((page) => (
+                <Link
+                  key={page.id}
+                  href={`/${page.slug}`}
+                  className="transition-colors hover:text-foreground"
+                >
+                  {page.title}
+                </Link>
+              ))}
+            </div>
+          ) : null}
+        </nav>
+
+        <div className="flex flex-col gap-6 border-t border-border pt-6 sm:flex-row sm:justify-between">
           {hasContact ? (
             <div className="flex flex-col gap-1">
               {settings.store.contactEmail ? <p>{settings.store.contactEmail}</p> : null}

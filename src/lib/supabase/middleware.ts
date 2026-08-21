@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
+import { isReservedRootSlug } from "@/lib/routes/reserved-slugs";
+
 const STAFF_ROLES = new Set(["admin", "staff", "production"]);
 const CART_SESSION_COOKIE = "cart_session";
 const CART_SESSION_MAX_AGE = 60 * 60 * 24 * 90; // 90 days
@@ -119,6 +121,35 @@ export async function updateSession(request: NextRequest) {
       .select("id")
       .eq("slug", collectionSlugMatch[1])
       .eq("is_active", true)
+      .maybeSingle();
+    if (!data) return notFoundResponse();
+  }
+
+  // Module 20 added two more public, crawlable dynamic routes, so they
+  // need the same treatment as products/collections above.
+  const blogSlugMatch = pathname.match(/^\/blog\/([^/]+)$/);
+  if (blogSlugMatch) {
+    const { data } = await supabase
+      .from("blog_posts")
+      .select("id")
+      .eq("slug", blogSlugMatch[1])
+      .eq("status", "published")
+      .maybeSingle();
+    if (!data) return notFoundResponse();
+  }
+
+  // Root-level CMS pages ((storefront)/[slug]). This is the lowest-priority
+  // route in the app, so an unmatched root path must 404 rather than
+  // soft-404 — an unknown URL returning 200 is exactly what Google flags.
+  // Real app routes are skipped via the shared reserved list, so this can
+  // only ever 404 paths nothing else claims.
+  const rootSlugMatch = pathname.match(/^\/([^/]+)$/);
+  if (rootSlugMatch && !isReservedRootSlug(rootSlugMatch[1])) {
+    const { data } = await supabase
+      .from("pages")
+      .select("id")
+      .eq("slug", rootSlugMatch[1])
+      .eq("status", "published")
       .maybeSingle();
     if (!data) return notFoundResponse();
   }

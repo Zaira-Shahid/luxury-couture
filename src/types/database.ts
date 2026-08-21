@@ -661,6 +661,17 @@ export interface Media {
   created_at: ISODateTime;
 }
 
+export interface Faq {
+  id: UUID;
+  question: string;
+  answer: string;
+  category: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: ISODateTime;
+  updated_at: ISODateTime;
+}
+
 export interface SeoMetadata {
   id: UUID;
   entity_type: string;
