@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 
 import { logger } from "@/lib/logger";
+import { notify } from "@/lib/notifications/notify";
+import { quoteCreatedTemplate } from "@/lib/notifications/templates";
 import { createClient } from "@/lib/supabase/server";
 import { createQuotationSchema } from "@/lib/validations/admin-quotations";
 
@@ -25,7 +27,7 @@ export async function createQuotation(enquiryId: string, formData: FormData): Pr
 
   const { data: enquiry } = await supabase
     .from("enquiries")
-    .select("customer_id")
+    .select("customer_id, contact_email")
     .eq("id", enquiryId)
     .single();
   if (!enquiry) return { error: "Enquiry not found." };
@@ -56,6 +58,12 @@ export async function createQuotation(enquiryId: string, formData: FormData): Pr
   }
 
   await supabase.from("enquiries").update({ status: "quoted" }).eq("id", enquiryId);
+
+  await notify(supabase, {
+    profileId: enquiry.customer_id,
+    email: enquiry.contact_email,
+    ...quoteCreatedTemplate(parsed.data.quotedPrice, "GBP"),
+  });
 
   revalidatePath(`/admin/enquiries/${enquiryId}`);
   return { success: true };

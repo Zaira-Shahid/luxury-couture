@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 
 import { getAuthUser } from "@/lib/auth/session";
 import { logger } from "@/lib/logger";
+import { notify } from "@/lib/notifications/notify";
+import { deliveredTemplate, reviewRequestTemplate, shippedTemplate, shippingStatusChangedTemplate } from "@/lib/notifications/templates";
 import { getShippingProvider } from "@/lib/shipping";
 import { createClient } from "@/lib/supabase/server";
 import { advanceShippingStatusSchema, updateShippingDetailsSchema } from "@/lib/validations/shipping";
@@ -73,18 +75,17 @@ export async function advanceShippingStatus(shippingOrderId: string, formData: F
 
   const { data: shipping } = await supabase
     .from("shipping_orders")
-    .select("order_id, shipped_at, delivered_at")
+    .select("order_id, shipped_at, delivered_at, courier, tracking_number")
     .eq("id", shippingOrderId)
     .single();
   if (!shipping) return { error: "Shipment not found." };
 
+  const isNewlyShipped = parsed.data.status !== "pending" && !shipping.shipped_at;
+  const isNewlyDelivered = parsed.data.status === "delivered" && !shipping.delivered_at;
+
   const updates: Record<string, unknown> = { status: parsed.data.status };
-  if (parsed.data.status !== "pending" && !shipping.shipped_at) {
-    updates.shipped_at = new Date().toISOString();
-  }
-  if (parsed.data.status === "delivered" && !shipping.delivered_at) {
-    updates.delivered_at = new Date().toISOString();
-  }
+  if (isNewlyShipped) updates.shipped_at = new Date().toISOString();
+  if (isNewlyDelivered) updates.delivered_at = new Date().toISOString();
 
   const { error: updateErr } = await supabase.from("shipping_orders").update(updates).eq("id", shippingOrderId);
   if (updateErr) {
@@ -98,15 +99,22 @@ export async function advanceShippingStatus(shippingOrderId: string, formData: F
     description: parsed.data.note ?? null,
   });
 
-  const { data: order } = await supabase.from("orders").select("customer_id").eq("id", shipping.order_id).single();
+  const { data: order } = await supabase
+    .from("orders")
+    .select("customer_id, order_number")
+    .eq("id", shipping.order_id)
+    .single();
   if (order) {
-    await supabase.from("notifications").insert({
-      profile_id: order.customer_id,
-      type: "shipping_status_changed",
-      title: "Your order's shipping status has been updated",
-      body: `Shipping status is now: ${parsed.data.status.replace(/_/g, " ")}.`,
-      channel: "in_app",
-    });
+    const template = isNewlyShipped
+      ? shippedTemplate(order.order_number, shipping.courier, shipping.tracking_number)
+      : isNewlyDelivered
+        ? deliveredTemplate(order.order_number)
+        : shippingStatusChangedTemplate(order.order_number, parsed.data.status);
+    await notify(supabase, { profileId: order.customer_id, ...template });
+
+    if (isNewlyDelivered) {
+      await notify(supabase, { profileId: order.customer_id, ...reviewRequestTemplate(order.order_number) });
+    }
   }
 
   revalidatePath(`/admin/shipping/${shippingOrderId}`);

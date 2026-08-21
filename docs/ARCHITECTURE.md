@@ -635,6 +635,73 @@ Quick reference for how this codebase is organized. For the full product roadmap
   respective transitions. Re-ran Modules 12's and 13's own verification scripts afterward — both
   still pass, confirming this module's (much smaller, no-new-RLS) changes didn't regress either.
 
+## Notifications & Automation Engine (Module 15)
+
+- **This module is the debt Modules 12–14 explicitly flagged coming due.** Each of them already
+  wrote directly to `notifications` (schema from Module 1's `0009`, unused until Module 12) with
+  its own ad hoc `title`/`body` string, each noting "ahead of Module 15's full engine." Module 15
+  is that consolidation — `updateOrderStatus`, `sendCustomerMessage`, `sendToProduction`,
+  `advanceProductionStatus`, `advanceShippingStatus` all now go through one real architecture
+  instead of their own inline inserts — plus the 8 events the plan lists that had no trigger point
+  at all before this module (deposit paid, balance due, quote created, quote approved, production
+  started, QC complete, shipped, review request, account created).
+- **`lib/notifications/notify.ts`** — one `notify(supabase, params)` function, taking an
+  already-instantiated Supabase client rather than creating its own. Necessary because call sites
+  span three genuinely different contexts: the regular RLS-respecting client in Server Actions, the
+  service-role client inside the Stripe webhook route (no user session exists there at all), and —
+  the one exception that never calls this function — the `handle_new_user()` DB trigger for
+  "account created," which can't call app-level TS code and duplicates its one welcome message
+  directly in SQL (`0037`). Inserts the in-app `notifications` row only when `profileId` is given
+  (a guest enquiry has no account to attach one to), and separately "sends" via mock email/WhatsApp
+  whenever that contact info is available regardless — so a guest still gets a (mocked)
+  confirmation even with no in-app inbox to show it in. Returns `{ inAppSuccess }` rather than
+  `void`, because one call site (`sendCustomerMessage`) needs to surface a real failure to the
+  admin — sending *is* that action's entire purpose, unlike the other call sites where the
+  notification is a secondary effect of an action that already succeeded on its own terms.
+- **`lib/notifications/mock-channels.ts`** — `sendMockEmail`/`sendMockWhatsApp`, both just
+  `logger.info` calls clearly tagged `[mock email]`/`[mock whatsapp]`. Per the plan's own "for
+  development, use mock/local notification providers" — no real provider credentials exist to
+  integrate against, same deferral shape as Modules 11/14's PayPal/courier decisions. Verified
+  live: a real Stripe webhook delivery (through the actual signature-verified route, not a
+  self-signed test payload) produced a real `[mock email]` log line with the correct order number
+  and amount. SMS stays entirely unbuilt — "SMS later," literally, in the plan.
+- **`lib/notifications/templates.ts`** — one small pure function per event
+  (`orderConfirmedTemplate`, `depositPaidTemplate`, `shippedTemplate`, etc.), each returning
+  `{ type, title, body }`. This is "create notification templates" made concrete — plain
+  functions, not a DB-editable template table (not asked for, and notification preferences/UI
+  polish are explicitly Module 27's — "Customer Notification Center" — job, not this module's).
+  Several events reuse one generic fallback template (`orderStatusChangedTemplate`,
+  `productionStatusChangedTemplate`, `shippingStatusChangedTemplate`) for the statuses that don't
+  get their own dedicated wording (e.g. `pending`, `cutting`), while specific statuses branch to a
+  dedicated template at the call site (`confirmed` → `orderConfirmedTemplate`, `quality_check` →
+  `qcCompleteTemplate`, the first non-`pending` shipping transition → `shippedTemplate`, `delivered`
+  → `deliveredTemplate` **and** a separate `reviewRequestTemplate` fired immediately after — no
+  scheduler exists anywhere in this stack to delay the review prompt, an explicit, approved
+  simplification).
+- **One small additive RLS policy (`0037`), no recursion risk.** `notifications` INSERT was
+  previously admin/production-staff-only (`0009`, `0035`) — two events (enquiry received, quote
+  approved) are customer-initiated with no admin in the loop, so the customer's own session needs
+  to insert a notification about *themselves*. Added `with check (profile_id = auth.uid())`, a
+  direct column comparison with no subquery into another table — structurally can't reproduce
+  Module 13's `0034` recursion bug. Every admin-initiated event still relies entirely on the
+  existing `is_admin()`/`is_production_staff()` policies; the webhook route uses the service-role
+  client and bypasses RLS regardless.
+- **Guest-safe by construction, not by special-casing.** `enquiries.customer_id` is nullable (the
+  same guest-submission design already established for enquiries/appointments/carts) — all three
+  enquiry-submission sites (`submitProductEnquiry`, `submitEnquiry`, the builder's
+  `requestQuotation`) pass `profileId: user?.id ?? null` straight through to `notify()`, which
+  simply skips the in-app branch when it's null and falls back to the guest's own `contactEmail`/
+  `contactPhone` for the mock channels — no separate guest code path was needed.
+- **Verified live** via `scripts/test-notifications.mjs` (cleaned up after): the `handle_new_user()`
+  trigger auto-creates a welcome notification on signup; the new self-insert policy lets a customer
+  notify themselves but not another profile; a guest enquiry correctly has no `profile_id` to
+  attach an in-app row to; each refactored/newly-wired call site's dedicated template branch
+  produces the right `type` and order-number-bearing body (order confirmed, QC complete, shipped
+  with courier+tracking, delivered plus a separate review-request row, deposit paid, balance due,
+  quote created for a guest enquiry, quote approved via self-insert). Re-ran Modules 11's, 12's,
+  13's, and 14's own verification scripts afterward — all still pass, including a real end-to-end
+  webhook delivery through the live route confirming the mock email fired correctly.
+
 ## `lib/` layering
 
 - `lib/supabase/` — the only place Supabase clients are constructed. `client.ts` for Client

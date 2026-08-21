@@ -1,6 +1,8 @@
 "use server";
 
 import { logger } from "@/lib/logger";
+import { notify } from "@/lib/notifications/notify";
+import { enquiryReceivedTemplate } from "@/lib/notifications/templates";
 import { createClient } from "@/lib/supabase/server";
 import { enquirySchema } from "@/lib/validations/contact";
 
@@ -37,6 +39,13 @@ export async function submitEnquiry(formData: FormData): Promise<ActionResult> {
     logger.error("enquiry submission failed", error);
     return { error: "Something went wrong. Please try again." };
   }
+
+  await notify(supabase, {
+    profileId: user?.id ?? null,
+    email: user?.email ?? parsed.data.contactEmail,
+    phone: parsed.data.contactPhone || null,
+    ...enquiryReceivedTemplate(),
+  });
 
   return { success: true };
 }
