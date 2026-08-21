@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { ConsentPreferencesLink } from "@/components/analytics/consent-preferences-link";
 import { siteConfig } from "@/lib/config/site";
 import { getPublishedPages } from "@/lib/content/get-content";
 import { getSiteSettings } from "@/lib/settings/get-site-settings";
@@ -27,6 +28,7 @@ const HELP_LINKS = [
   { href: "/faq", label: "FAQ" },
   { href: "/blog", label: "Journal" },
   { href: "/contact", label: "Contact" },
+  { href: "/privacy", label: "Privacy" },
 ];
 
 export async function SiteFooter() {
@@ -54,6 +56,7 @@ export async function SiteFooter() {
                 {link.label}
               </Link>
             ))}
+            <ConsentPreferencesLink />
           </div>
           {pages.length > 0 ? (
             <div className="flex flex-col gap-2">

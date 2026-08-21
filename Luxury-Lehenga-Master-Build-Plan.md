@@ -1368,7 +1368,26 @@ Google Search Console integration documentation.
 
 # MODULE 21 — ANALYTICS & TRACKING
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
+
+(Provider abstraction in `lib/analytics/` following the `lib/social`/`lib/shipping` shape, writing
+to `analytics_events` — a Module 1 table that had never been used. All 13 events instrumented.
+GA4/Meta/TikTok pixels wired but unset by default, so nothing third-party loads. Admin → Analytics
+gives a session-based conversion funnel plus per-step trends; the Dashboard keeps the business
+figures.
+
+Consent: three granular categories (Necessary / Analytics / Marketing), opt-in, with equal-weight
+Accept/Reject, nothing pre-ticked, and withdrawal via a footer link on every page. The gate lives
+inside `trackServer()` rather than at each call site, so a future action cannot forget it. Raw
+events auto-purge after 14 months via a monthly cron.
+
+One deliberate carve-out, stated plainly: `purchase`/`payment_completed` are recorded without
+consent but with `session_id = null` — they restate facts already in `orders`/`payments` and store
+nothing on the device. The funnel counts distinct sessions, so they can never distort a conversion
+rate.
+
+⚠️ **Before launch:** create the `/privacy` CMS page the consent banner links to (Admin → Content),
+and ensure `CRON_SECRET` is set — `/api/cron/purge-analytics` deletes data. See `docs/ANALYTICS.md`.)
 
 Create analytics abstraction.
 
@@ -2650,12 +2669,12 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULE 20 COMPLETE`
+`MODULE 21 COMPLETE`
 
 Current Module:
 
-`MODULE 20 — COMPLETE`
+`MODULE 21 — COMPLETE`
 
 Next Action:
 
-`Start Module 21`
+`Start Module 22`

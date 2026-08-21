@@ -1104,6 +1104,65 @@ canonical/OG/Twitter rules live, so no page can drift.
   fetch-then-filter-in-JS pages need a narrower signal — `/admin/seo`'s negative check asserts on a
   `value="<uuid>"` attribute, which exists only in rendered markup.
 
+## Analytics & Tracking (Module 21)
+
+Full operational detail is in `docs/ANALYTICS.md`. The architectural points:
+
+- **`lib/analytics/events.ts` is the single source of truth.** The 13 event names, the
+  client-sendable subset, the transaction subset and the funnel definition all live there, so a
+  producer and the reporting layer can never disagree about what an event is called. It imports
+  nothing — client components, Server Actions and the Edge runtime all pull from it.
+- **`lib/analytics/` follows the `lib/social/`+`lib/shipping/` shape**: `provider.ts` interface,
+  `supabase-provider.ts` (the free default, writing to `analytics_events`), `mock-provider.ts`,
+  `index.ts` factory. `track()` never throws — a failed analytics write must not break the
+  operation the customer actually performed, so it warns and returns.
+- **Consent is enforced in `trackServer()`, not at each call site.** An instrumented Server Action
+  just calls `trackServer()`; that function decides whether anything is written. A future action
+  therefore cannot forget the consent check, which is the failure mode that matters here.
+- **Two capture paths, deliberately.** High-frequency browser events (`page_view`, `product_view`,
+  `checkout_started`) go to `/api/analytics` via `navigator.sendBeacon` — non-blocking and
+  surviving page unload, which a Server Action round trip is not. Everything else is emitted
+  server-side from the action that already performs the operation, where the data is trustworthy.
+- **The ingest route's validation IS the security boundary.** `analytics_events` is
+  insert-by-anyone at the RLS level (that is what allows anonymous visitors to be measured at all),
+  so the route enforces a client-event allow-list — `purchase` can never be forged from a browser —
+  plus a payload size cap, a server-side consent re-check and a basic bot filter.
+- **The consent cookie is read on the server**, in `(storefront)/layout.tsx`, and passed into the
+  banner and pixels as `initialConsent`. Found during testing: without it the banner rendered only
+  after hydration, so it was absent from the server HTML entirely — a pop-in and a layout shift for
+  every new visitor. Cookies are readable server-side; there was no reason to wait for the client.
+- **`analytics_session` is a separate cookie from `cart_session`.** Reusing the cart cookie would
+  have turned a strictly-necessary cookie into a consent-requiring one, meaning no cart without a
+  cookie prompt.
+- **0046's three reporting functions are SECURITY INVOKER**, unlike `find_and_mark_abandoned_carts`
+  (0044) which needs definer rights to mutate carts. These only read, so running as the caller lets
+  the existing admin-only SELECT policy govern them — no bypass to guard, and no `is_admin()` check
+  a later edit could drop. `scripts/test-analytics.mjs` asserts an anonymous caller gets zero rows
+  from the RPC, which is what proves this.
+- **The funnel counts DISTINCT sessions, not rows.** One visitor viewing ten products is one
+  "product view" step; counting rows would report a 10% add-to-cart rate where the truth was 100%.
+  It also makes the consent-less-purchase carve-out safe: those rows have `session_id = null`,
+  which `count(distinct session_id)` ignores, so they can never push a step above the one before it.
+- **Charts are hand-rolled inline SVG; no charting library was added** for two visualisations. The
+  trend is **small multiples** — one panel per funnel step, each on its own scale — because product
+  views outnumber purchases by an order of magnitude, and the alternatives were a dual y-axis
+  (never correct) or flattening purchases into the baseline. Colour comes from the Module 3
+  semantic tokens, so both themes work without hardcoded hexes.
+- **Retention is enforced, not just documented**: `/api/cron/purge-analytics` deletes rows past 14
+  months, monthly via `vercel.json`, reusing the `CRON_SECRET` check from the abandoned-cart cron.
+  It uses the service-role client because `analytics_events` has no DELETE policy for anyone —
+  purging is a scheduled system job, not something a signed-in admin should trigger by hand.
+- **Verified live** via `scripts/test-analytics.mjs` (45 checks, self-cleaning, exits non-zero on
+  failure) against a production build: consent gating in all three states, ingest validation
+  including a forged `purchase` attempt and an oversized payload, RLS from anonymous/customer/admin
+  perspectives, deterministic funnel arithmetic (a repeat view must not double-count), retention
+  purge cutoff correctness, and admin access control. **Two further checks — that the purge cron
+  rejects a missing and a wrong bearer token — are conditional on `CRON_SECRET` being set and are
+  therefore SKIPPED locally, where it isn't.** Re-run the script in an environment that sets it
+  (as any real deploy must) to exercise them; the same conditional applies to the abandoned-cart
+  cron from Module 19. The rendered admin page was
+  also inspected with seeded data to confirm funnel geometry and no NaN in the SVG paths.
+
 ## `lib/` layering
 
 - `lib/supabase/` — the only place Supabase clients are constructed. `client.ts` for Client

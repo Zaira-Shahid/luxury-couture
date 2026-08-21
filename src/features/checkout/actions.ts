@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 
 import { getCart } from "@/lib/cart/get-cart";
+import { trackServer } from "@/lib/analytics/track-server";
 import { logger } from "@/lib/logger";
 import { poundsToPoints, pointsToPounds } from "@/lib/loyalty/config";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -207,6 +208,18 @@ export async function placeOrder(formData: FormData): Promise<ActionResult> {
   });
 
   await admin.from("carts").update({ status: "converted" }).eq("id", cart.id);
+
+  // Before redirect() — it throws to unwind, so nothing after it runs.
+  await trackServer(
+    "purchase",
+    {
+      orderId: order.id,
+      orderNumber: order.order_number,
+      value: totalAmount,
+      discount: discountAmount,
+    },
+    { profileId: user.id }
+  );
 
   redirect(`/checkout/confirmed/${order.order_number}`);
 }

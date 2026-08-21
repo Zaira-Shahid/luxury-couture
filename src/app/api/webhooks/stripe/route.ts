@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 
+import { getAnalyticsProvider } from "@/lib/analytics";
 import { logger } from "@/lib/logger";
 import { pointsEarnedForPayment } from "@/lib/loyalty/config";
 import { notify } from "@/lib/notifications/notify";
@@ -78,6 +79,24 @@ export async function POST(request: NextRequest) {
             p_customer_id: order.customer_id,
             p_points: pointsEarnedForPayment(payment.amount),
             p_reference: `payment:${paymentId}`,
+          });
+
+          // Uses the provider directly rather than trackServer(): this
+          // request comes from Stripe, not a browser, so there are no
+          // consent or session cookies to read and the service-role
+          // client is already in hand. payment_completed is a transaction
+          // event — recorded as a business record with session_id null.
+          await getAnalyticsProvider(admin).track({
+            name: "payment_completed",
+            profileId: order.customer_id,
+            sessionId: null,
+            properties: {
+              paymentId,
+              orderId: payment.order_id,
+              value: Number(payment.amount),
+              currency: payment.currency,
+              paymentType: payment.type,
+            },
           });
         }
       } else {

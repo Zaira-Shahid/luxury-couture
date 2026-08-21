@@ -1,5 +1,6 @@
 "use server";
 
+import { trackServer } from "@/lib/analytics/track-server";
 import { logger } from "@/lib/logger";
 import { notify } from "@/lib/notifications/notify";
 import { enquiryReceivedTemplate } from "@/lib/notifications/templates";
@@ -52,6 +53,8 @@ export async function submitProductEnquiry(
     phone: parsed.data.contactPhone || null,
     ...enquiryReceivedTemplate(),
   });
+
+  await trackServer("enquiry_submitted", { enquiryType: "general", productSlug });
 
   return { success: true };
 }

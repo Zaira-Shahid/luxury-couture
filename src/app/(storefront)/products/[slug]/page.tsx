@@ -6,6 +6,7 @@ import { CustomizeTeaser } from "@/components/storefront/customize-teaser";
 import { ProductCard } from "@/components/storefront/product-card";
 import { ProductEnquiryForm } from "@/components/storefront/product-enquiry-form";
 import { ProductReviews, RatingSummary } from "@/components/storefront/product-reviews";
+import { EventTracker } from "@/components/analytics/event-tracker";
 import { ScrollReveal } from "@/components/motion/scroll-reveal";
 import { Breadcrumbs } from "@/components/seo/breadcrumbs";
 import { JsonLd } from "@/components/seo/json-ld";
@@ -85,6 +86,10 @@ export default async function ProductDetailPage({
           brandName: settings.seo.defaultTitle ?? siteConfig.name,
           rating,
         })}
+      />
+      <EventTracker
+        event="product_view"
+        properties={{ productId: product.id, productName: product.name }}
       />
       <Breadcrumbs
         className="mb-8"
