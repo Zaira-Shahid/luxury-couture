@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
+import { EventTracker } from "@/components/analytics/event-tracker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAuthUser } from "@/lib/auth/session";
 import { getCart } from "@/lib/cart/get-cart";
@@ -38,6 +39,7 @@ export default async function CheckoutPage() {
 
   return (
     <div className="container max-w-2xl py-16">
+      <EventTracker event="checkout_started" properties={{ value: total, itemCount: items.length }} />
       <h1 className="mb-6 font-heading text-2xl">Checkout</h1>
 
       <Card className="mb-6">

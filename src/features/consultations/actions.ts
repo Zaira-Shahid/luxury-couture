@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { trackServer } from "@/lib/analytics/track-server";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -75,6 +76,11 @@ export async function bookConsultation(formData: FormData): Promise<ActionResult
     logger.error("consultation booking failed", error);
     return { error: "Could not book that appointment. Please try again." };
   }
+
+  await trackServer("consultation_booked", {
+    appointmentType: "consultation",
+    consultationTypeId: parsed.data.consultationTypeId,
+  });
 
   revalidatePath("/account/consultations");
   return { success: true };

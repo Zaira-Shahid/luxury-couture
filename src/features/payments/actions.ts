@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 
+import { trackServer } from "@/lib/analytics/track-server";
 import { logger } from "@/lib/logger";
 import { siteConfig } from "@/lib/config/site";
 import { getPaymentProvider, isStripeConfigured } from "@/lib/payments";
@@ -70,6 +71,19 @@ export async function initiatePayment(paymentId: string): Promise<ActionResult |
     .from("payments")
     .update({ provider: "stripe", provider_reference: session.providerReference })
     .eq("id", payment.id);
+
+  // Must fire before redirect(): redirect() throws internally to unwind,
+  // so nothing after it in this function ever runs.
+  await trackServer(
+    "payment_started",
+    {
+      paymentId: payment.id,
+      orderId: order.id,
+      value: Number(payment.amount),
+      currency: order.currency,
+    },
+    { profileId: user.id }
+  );
 
   redirect(session.url);
 }
