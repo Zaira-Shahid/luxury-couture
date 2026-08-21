@@ -1278,13 +1278,24 @@ Admin moderation required.
 
 # MODULE 19 — MARKETING & CUSTOMER RETENTION
 
-Status: [~] IN PROGRESS — Pass 1 of 2 complete
+Status: [x] COMPLETE
 
-(Split into two passes by explicit agreement. Pass 1 — done: coupons/discounts, loyalty points,
-referral program, the checkout/payment-linked features. Pass 2 — not started: customer segments,
-campaigns, newsletter unsubscribe, promotional banners, and the abandoned-cart cron job. Referral
-completion is admin-triggered, not automatic on the referred customer's first order — an explicit,
-approved scope call, avoiding a new hook into placeOrder for a low-frequency feature.)
+(Built in two passes by explicit agreement. Pass 1: coupons/discounts, loyalty points, referral
+program — the checkout/payment-linked features. Pass 2: customer segments, campaigns, newsletter
+unsubscribe, promotional banners, and the abandoned-cart cron job. Both passes verified live and
+committed separately.
+
+Approved scope calls: referral completion is admin-triggered, not automatic on the referred
+customer's first order, avoiding a new hook into placeOrder for a low-frequency feature; customer
+segments are computed tags derived at read time from existing order/profile data, not a persisted
+membership table with a rule builder; and the new scheduled promotional_banners table replaces
+Module 3's single site_settings announcement toggle rather than sitting alongside it.
+
+Note: the abandoned-cart job deliberately keys off cart_items.updated_at, not carts.updated_at —
+the latter is bumped on every page view site-wide by get_or_create_cart and is therefore useless as
+an abandonment signal. See docs/ARCHITECTURE.md. This module also introduces the project's first
+scheduled task (vercel.json + Vercel Cron), which requires CRON_SECRET to be set before any real
+deploy.)
 
 Implement architecture for:
 
@@ -2618,12 +2629,12 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULE 18 COMPLETE`
+`MODULE 19 COMPLETE`
 
 Current Module:
 
-`MODULE 18 — COMPLETE`
+`MODULE 19 — COMPLETE`
 
 Next Action:
 
-`Start Module 19`
+`Start Module 20`

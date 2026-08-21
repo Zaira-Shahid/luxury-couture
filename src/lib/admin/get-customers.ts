@@ -3,19 +3,22 @@ import { createClient } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
 import type { Address, LoyaltyAccount, Order, Profile, Quotation, Referral } from "@/types/database";
 
-export type AdminCustomer = Profile & { orderCount: number; lifetimeSpend: number };
+export type AdminCustomer = Profile & { orderCount: number; lifetimeSpend: number; lastOrderAt: string | null };
 
 /**
- * Every signed-up customer, with a lightweight order count/lifetime spend
- * computed in memory from all orders — acceptable for a boutique business
- * at this scale; a real "top customers" report belongs to Module 21
- * (Analytics & Tracking), not this foundation module.
+ * Every signed-up customer, with a lightweight order count/lifetime spend/
+ * last-order-date computed in memory from all orders — acceptable for a
+ * boutique business at this scale; a real "top customers" report belongs
+ * to Module 21 (Analytics & Tracking), not this foundation module. This
+ * is also the exact aggregate lib/admin/customer-segments.ts (Module 19
+ * Pass 2) computes its VIP/New/At-risk tags from, rather than re-deriving
+ * order data a second way.
  */
 export async function getAdminCustomers(): Promise<AdminCustomer[]> {
   const supabase = await createClient();
   const [{ data: profiles, error: profilesError }, { data: orders, error: ordersError }] = await Promise.all([
     supabase.from("profiles").select("*").eq("role", "customer").order("created_at", { ascending: false }),
-    supabase.from("orders").select("customer_id, total_amount"),
+    supabase.from("orders").select("customer_id, total_amount, created_at"),
   ]);
 
   if (profilesError) {
@@ -24,11 +27,12 @@ export async function getAdminCustomers(): Promise<AdminCustomer[]> {
   }
   if (ordersError) logger.warn("failed to load orders for customer stats", { message: ordersError.message });
 
-  const byCustomer = new Map<string, { orderCount: number; lifetimeSpend: number }>();
-  for (const order of (orders ?? []) as Pick<Order, "customer_id" | "total_amount">[]) {
-    const existing = byCustomer.get(order.customer_id) ?? { orderCount: 0, lifetimeSpend: 0 };
+  const byCustomer = new Map<string, { orderCount: number; lifetimeSpend: number; lastOrderAt: string | null }>();
+  for (const order of (orders ?? []) as Pick<Order, "customer_id" | "total_amount" | "created_at">[]) {
+    const existing = byCustomer.get(order.customer_id) ?? { orderCount: 0, lifetimeSpend: 0, lastOrderAt: null };
     existing.orderCount += 1;
     existing.lifetimeSpend += Number(order.total_amount);
+    if (!existing.lastOrderAt || order.created_at > existing.lastOrderAt) existing.lastOrderAt = order.created_at;
     byCustomer.set(order.customer_id, existing);
   }
 
@@ -36,6 +40,7 @@ export async function getAdminCustomers(): Promise<AdminCustomer[]> {
     ...profile,
     orderCount: byCustomer.get(profile.id)?.orderCount ?? 0,
     lifetimeSpend: byCustomer.get(profile.id)?.lifetimeSpend ?? 0,
+    lastOrderAt: byCustomer.get(profile.id)?.lastOrderAt ?? null,
   }));
 }
 

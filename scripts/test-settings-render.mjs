@@ -6,9 +6,11 @@ const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUP
 
 const APP_URL = process.env.TEST_APP_URL ?? "http://localhost:3000";
 
+// store.announcement_enabled / store.announcement_text are gone as of
+// Module 19 Pass 2 — the single site_settings announcement toggle was
+// replaced by the scheduled promotional_banners table, whose rendering is
+// covered by scripts/test-marketing-pass2.mjs instead.
 const testRows = [
-  { key: "store.announcement_enabled", value: true },
-  { key: "store.announcement_text", value: "Module 3 test announcement — free worldwide shipping" },
   { key: "seo.default_title", value: "Module3TestTitle" },
   { key: "store.contact_email", value: "module3-test@example.com" },
 ];
@@ -22,8 +24,13 @@ const resp = await fetch(APP_URL + "/");
 const html = await resp.text();
 
 const checks = [
+  // KNOWN PRE-EXISTING FAILURE (not caused by Module 19): the homepage's own
+  // generateMetadata returns `title: settings.homepage.seoTitle ?? undefined`,
+  // and an explicit `undefined` OVERRIDES the root layout's title.default in
+  // Next.js rather than inheriting it — so with homepage.seo_title unset the
+  // page renders NO <title> tag at all. Verified against a clean checkout with
+  // this module's changes stashed. Belongs to the SEO module, not here.
   ["title reflects seo.default_title", html.includes("Module3TestTitle")],
-  ["announcement bar text renders", html.includes("Module 3 test announcement")],
   ["footer contact email renders", html.includes("module3-test@example.com")],
 ];
 

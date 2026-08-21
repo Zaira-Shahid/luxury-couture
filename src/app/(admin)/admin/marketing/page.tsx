@@ -19,7 +19,15 @@ export default async function AdminMarketingPage() {
     <div className="container py-10">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="font-heading text-2xl">Marketing</h1>
-        <Button render={<Link href="/admin/marketing/new" />}>New Coupon</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" render={<Link href="/admin/marketing/campaigns" />}>
+            Campaigns
+          </Button>
+          <Button variant="outline" render={<Link href="/admin/marketing/banners" />}>
+            Banners
+          </Button>
+          <Button render={<Link href="/admin/marketing/new" />}>New Coupon</Button>
+        </div>
       </div>
 
       {coupons.length === 0 ? (

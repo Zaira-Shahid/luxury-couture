@@ -95,9 +95,10 @@ Quick reference for how this codebase is organized. For the full product roadmap
   `asChild` prop at all; using it silently drops the link semantics rather than erroring.
 - Admin-supplied image URLs (collection covers, product images, hero image) render via plain
   `<img>`, not `next/image`, for the same unconfigured-remote-host reason as the Module 3 logo.
-- `newsletter_subscribers` (`0020`, Module 4) is a minimal capture-only table (email, source,
-  subscribed_at) — Module 19 ("Marketing & Customer Retention") owns the full campaign/segment
-  architecture later. **Found while verifying this module:** `subscribeToNewsletter` originally
+- `newsletter_subscribers` (`0020`, Module 4) started as a minimal capture-only table (email,
+  source, subscribed_at); Module 19 Pass 2 added `unsubscribed_at`/`unsubscribe_token` and the
+  campaign/segment architecture on top — see that section below. **Found while verifying this
+  module:** `subscribeToNewsletter` originally
   used `.upsert(..., { ignoreDuplicates: true })` to make re-signups idempotent, but that failed
   RLS for every anonymous caller — even brand-new emails. Root cause, confirmed against the actual
   `@supabase/postgrest-js` source: `.upsert()` always needs a `RETURNING` row internally (to report
@@ -926,6 +927,81 @@ Quick reference for how this codebase is organized. For the full product roadmap
   code rejected). All new/changed routes resolve with a genuine 200 via the same authenticated-session
   technique as Modules 16-18. Re-ran Module 11's and Module 16's own scripts afterward — both still
   pass, confirming the webhook/admin-payments/admin-customers changes didn't regress anything.
+
+## Marketing & Customer Retention — Pass 2 (Module 19)
+
+- **`carts.updated_at` is NOT a "last cart activity" signal — this was a real bug caught during
+  design, before any code was built on the wrong assumption.** The obvious way to find an abandoned
+  cart is "active carts whose `updated_at` is older than N hours". That would have silently found
+  almost nothing: `SiteHeader` calls `getCartItemCount()` on *every page view site-wide*, which
+  calls `get_or_create_cart` (`0032`), whose `INSERT … ON CONFLICT DO UPDATE SET updated_at = now()`
+  refreshes the column on any page load at all. A customer who never touches their cart again but
+  keeps browsing would look perpetually active forever. `find_and_mark_abandoned_carts` (`0044`)
+  therefore keys off `MAX(cart_items.updated_at)` — a column that only moves when an item is
+  genuinely added/updated/removed — expressed as a `GROUP BY … HAVING` aggregate, which is why it's
+  a SQL function rather than something assembled through the JS client's filter API. Verified
+  directly: a cart whose only item was last touched 2 days ago but whose `carts.updated_at` was
+  deliberately bumped to `now()` **is** correctly marked abandoned, while a cart with a fresh item
+  is not.
+- **Related pre-existing characteristic (not introduced here, not fixed here):** because
+  `get_or_create_cart` runs on every anonymous page view, empty guest `carts` rows accumulate
+  steadily — several test runs added a dozen. They're harmless to the cron (it inner-joins
+  `cart_items`, so a cart with no items is never a candidate), but it is a real source of table
+  growth that belongs to the cart module, not this one.
+- **Customer segments are computed tags, not persisted membership** (approved scope call).
+  `lib/admin/customer-segments.ts` derives `vip` / `new` / `at_risk` at read time from the exact
+  aggregate `getAdminCustomers()` already builds, rather than introducing a segment table and a
+  rule-builder system. `getAdminCustomers()` gained `lastOrderAt` for the at-risk rule; the
+  thresholds live as three named constants in one file. `/admin/customers?segment=` filters via
+  plain server-rendered `<Link>` pills — no client state.
+- **Campaign sends deliberately bypass `notify()`.** `sendCampaign` calls `sendMockEmail` directly,
+  keeping marketing content out of the transactional in-app notification feed (orders, payments,
+  shipping) even though both ultimately reach the same mock provider — the free-first provider
+  pattern from Module 15, not a rebuild of it. `getCampaignRecipients` is also the one place a bulk
+  `auth.admin.listUsers()` is justified: unlike the admin customer *list* (which deliberately avoids
+  it), a send genuinely needs every matching recipient's email at once.
+- **Newsletter unsubscribe is another guest-inaccessible-row case.** A subscriber has no account and
+  no RLS path to their own row (`0020`: select/update/delete are admin-only), so `unsubscribe_newsletter`
+  (`0043`) is a narrow `security definer` RPC gated on a per-row `unsubscribe_token` — the same
+  token-gated shape as builder share tokens and referral redemption. The action reports the same
+  generic result for a valid, an already-used, and an unknown token, so it can't be used to probe
+  which tokens exist. Existing subscriber rows picked up backfilled tokens from the column's
+  `not null default gen_random_uuid()`, confirmed against the one real pre-existing subscriber.
+- **Promotional banners replace Module 3's announcement toggle rather than sitting alongside it.**
+  `store.announcement_enabled` / `store.announcement_text` are gone from `SiteSettings` and from
+  `applyRow`'s switch; leftover `site_settings` rows with those keys are harmlessly ignored by the
+  default case. Stacking both mechanisms would have rendered two banners at once. RLS gates only
+  `is_active` (public read when active or admin); the schedule window (`starts_at`/`expires_at`) is
+  applied in `getCurrentBanner()`, matching how coupons handle their own window. Note that chained
+  `.or()` calls in the Supabase JS client AND together — each contributes one OR-group — which is
+  what makes the two-window filter express correctly in a single query.
+- **First scheduled task in the project.** `vercel.json` registers a daily Vercel Cron hitting
+  `/api/cron/abandon-carts`; no cron/queue infrastructure existed anywhere before this. The route
+  verifies `Authorization: Bearer $CRON_SECRET` the same way the Stripe webhook checks its own
+  secret, and skips the check when `CRON_SECRET` is unset — matching the project's existing
+  "unset = not configured yet" tolerance, but it **must** be set before any real deploy or the
+  endpoint is open. Guest carts are still marked abandoned but never notified: there is genuinely
+  no contact info captured for them anywhere in the schema.
+- **Verified live** via `scripts/test-marketing-pass2.mjs` (an admin plus four customers shaped to
+  hit each segment case, cleaned up after): segment thresholds including the negative cases, the
+  `?segment=` filter's *rendered* rows, the unsubscribe token round-trip and its non-disclosure
+  behavior, campaign draft→sent lifecycle with the recipient preview, banner RLS/schedule/priority,
+  the `carts.updated_at` test above, and the cron route end-to-end — 401 with no header, 401 with a
+  wrong secret, 200 with the right one, the cart actually transitioning to `abandoned`, and a real
+  `abandoned_cart` notification row plus mock email for the signed-in customer. Two script-writing
+  gotchas worth knowing for future modules: in dev, Next.js embeds the **raw, unfiltered** server
+  fetch responses in the RSC flight payload, so a whole-document substring check will report a
+  filtered-*away* row as present — assert against the rendered `<tbody>` instead; and React splits
+  adjacent text/interpolation nodes with `<!-- -->` markers, so `"Will send to 1 recipient"` arrives
+  as `"Will send to <!-- -->1<!-- --> recipient"` and must be normalized before matching.
+- **Pre-existing bug found while regression-testing, deliberately left unfixed (out of scope):** the
+  homepage's own `generateMetadata` returns `title: settings.homepage.seoTitle ?? undefined`, and an
+  explicit `undefined` *overrides* the root layout's `title.default` in Next.js rather than
+  inheriting it — so with `homepage.seo_title` unset the homepage renders **no `<title>` tag at
+  all**. Confirmed against a clean checkout with this module's changes stashed, so it is not a
+  Module 19 regression. `scripts/test-settings-render.mjs` still asserts it (and still fails) on
+  purpose, annotated in place, rather than deleting a check that exposes a genuine defect. Belongs
+  to the SEO module.
 
 ## `lib/` layering
 

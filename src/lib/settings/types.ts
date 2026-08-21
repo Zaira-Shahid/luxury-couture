@@ -10,6 +10,12 @@ export type SocialLinks = {
  * `getSiteSettings()` merges rows from `site_settings` (namespaced keys,
  * e.g. "theme.primary") over these defaults, so every field is always
  * defined even when the table has zero rows — today's real state.
+ *
+ * `store.announcementEnabled`/`announcementText` (Module 3's single
+ * global on/off banner) were removed here — Module 19 Pass 2 replaced
+ * that mechanism with `promotional_banners` (multiple, scheduled,
+ * admin-managed). Any leftover `store.announcement_*` rows in
+ * `site_settings` are harmlessly ignored by `applyRow`'s default case.
  */
 export type SiteSettings = {
   theme: {
@@ -22,8 +28,6 @@ export type SiteSettings = {
     faviconUrl: string | null;
   };
   store: {
-    announcementEnabled: boolean;
-    announcementText: string | null;
     socialLinks: SocialLinks;
     contactEmail: string | null;
     contactPhone: string | null;
@@ -48,8 +52,6 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   theme: { primary: null, accent: null },
   branding: { logoUrl: null, faviconUrl: null },
   store: {
-    announcementEnabled: false,
-    announcementText: null,
     socialLinks: {},
     contactEmail: null,
     contactPhone: null,

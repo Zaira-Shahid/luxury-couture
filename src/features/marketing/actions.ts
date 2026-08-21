@@ -32,3 +32,23 @@ export async function subscribeToNewsletter(formData: FormData): Promise<ActionR
 
   return { success: true };
 }
+
+/**
+ * A subscriber has no account and no RLS path to their own row (0020:
+ * select/update/delete are admin-only) — unsubscribe_newsletter (0043) is
+ * a security definer RPC, the same token-gated pattern as every other
+ * guest-facing operation in this project. Always reports success even
+ * for an unknown/already-used token, so this can't be used to probe
+ * which tokens are valid.
+ */
+export async function unsubscribeFromNewsletter(token: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("unsubscribe_newsletter", { p_token: token });
+
+  if (error) {
+    logger.warn("newsletter unsubscribe failed", { message: error.message });
+    return { error: "Something went wrong. Please try again." };
+  }
+
+  return { success: true };
+}
