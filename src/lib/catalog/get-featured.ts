@@ -47,10 +47,12 @@ export const getFeaturedProducts = cache(async (): Promise<FeaturedProduct[]> =>
 });
 
 /**
- * reviews.customer_id -> profiles is owner/admin-only RLS, so a joined
- * customer name would come back null for anonymous visitors — showing
- * testimonials with a generic "Verified Customer" attribution rather than
- * opening a new public-read carve-out on profiles just for display names.
+ * Attribution comes from reviews.reviewer_name (Module 18) — a name the
+ * customer provides once at submission and that gets snapshotted onto the
+ * row, not a live join to profiles. profiles' own SELECT RLS is
+ * owner/admin-only, so a join-at-read-time approach would return null for
+ * anonymous visitors; capturing the name at write time avoids ever
+ * needing a public-read carve-out on profiles.
  */
 export const getFeaturedTestimonials = cache(async (): Promise<Review[]> => {
   const supabase = await createClient();

@@ -2,14 +2,15 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
  * Uploads a file via the service-role client — storage.objects has no
- * client-writable RLS policy for either bucket (0025), so every upload
- * goes through here after the caller has already run its own
- * authorization check (token match for guests, is_admin() for the media
- * library). Path should already be randomized by the caller; this doesn't
- * add any additional obscurity of its own.
+ * client-writable RLS policy for any of the three buckets (0025, 0039),
+ * so every upload goes through here after the caller has already run its
+ * own authorization check (token match for guests, is_admin() for the
+ * media library, reviews.customer_id = auth.uid() for review photos).
+ * Path should already be randomized by the caller; this doesn't add any
+ * additional obscurity of its own.
  */
 export async function uploadToStorage(
-  bucket: "inspiration-images" | "media",
+  bucket: "inspiration-images" | "media" | "review-media",
   path: string,
   file: File
 ): Promise<{ url: string; path: string } | { error: string }> {
@@ -29,7 +30,7 @@ export async function uploadToStorage(
 }
 
 export async function deleteFromStorage(
-  bucket: "inspiration-images" | "media",
+  bucket: "inspiration-images" | "media" | "review-media",
   path: string
 ): Promise<void> {
   const admin = createAdminClient();

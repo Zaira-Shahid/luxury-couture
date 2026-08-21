@@ -33,7 +33,7 @@ export async function Testimonials() {
                 <p className="flex-1 text-sm text-muted-foreground">{review.body}</p>
               ) : null}
               <p className="text-xs tracking-wide text-muted-foreground uppercase">
-                Verified Customer
+                {review.reviewer_name || "Verified Customer"}
               </p>
             </div>
           </ScrollReveal>

@@ -76,7 +76,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
   {
     label: "Growth",
     items: [
-      { href: "/admin/reviews", label: "Reviews", icon: Star, comingSoon: true },
+      { href: "/admin/reviews", label: "Reviews", icon: Star },
       { href: "/admin/marketing", label: "Marketing", icon: Megaphone, comingSoon: true },
       { href: "/admin/content", label: "Content", icon: FileEdit, comingSoon: true },
       { href: "/admin/seo", label: "SEO", icon: Search, comingSoon: true },

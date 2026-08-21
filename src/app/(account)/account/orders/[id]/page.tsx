@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { isStripeConfigured } from "@/lib/payments";
 import { getOrderDetail } from "@/lib/orders/get-orders";
@@ -184,6 +186,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                   {shipping.tracking_number ? ` · ${shipping.tracking_number}` : ""}
                 </span>
               </div>
+            ) : null}
+            {shipping?.status === "delivered" ? (
+              <Button render={<Link href={`/account/reviews/new?orderId=${order.id}`} />} size="sm" className="w-fit">
+                Leave a Review
+              </Button>
             ) : null}
           </CardContent>
         </Card>
