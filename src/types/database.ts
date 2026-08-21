@@ -128,6 +128,17 @@ export interface Colour extends Omit<BuilderOptionBase, "description"> {
   hex_value: string | null;
 }
 
+/** The six builder-option tables — identical shape (Colour swaps description for hex_value), identical RLS. */
+export const BUILDER_OPTION_TABLES = [
+  "fabrics",
+  "embroidery_types",
+  "colours",
+  "sleeve_styles",
+  "necklines",
+  "dupatta_options",
+] as const;
+export type BuilderOptionTable = (typeof BUILDER_OPTION_TABLES)[number];
+
 export type BuilderConfigurationStatus = "draft" | "submitted";
 
 export interface BuilderConfiguration {
@@ -144,6 +155,24 @@ export interface BuilderConfiguration {
   estimated_price: number | null;
   status: BuilderConfigurationStatus;
   share_token: UUID;
+  created_at: ISODateTime;
+  updated_at: ISODateTime;
+}
+
+export type InventoryCategory = "fabric" | "material" | "embroidery_material";
+
+export interface InventoryItem {
+  id: UUID;
+  category: InventoryCategory;
+  fabric_id: UUID | null;
+  name: string;
+  sku: string | null;
+  unit: string;
+  stock_quantity: number;
+  reserved_quantity: number;
+  low_stock_threshold: number;
+  is_available: boolean;
+  notes: string | null;
   created_at: ISODateTime;
   updated_at: ISODateTime;
 }

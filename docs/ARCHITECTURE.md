@@ -747,6 +747,58 @@ Quick reference for how this codebase is organized. For the full product roadmap
   request to `/admin` still redirects (not a 500), and RLS-checked that a plain customer account
   gets nothing back from `profiles`/`quotations` while admin sees everything.
 
+## Admin Product, Builder & Inventory Management (Module 17)
+
+- **Builder options already had complete admin RLS from Module 1** — `fabrics`, `embroidery_types`,
+  `colours`, `sleeve_styles`, `necklines`, `dupatta_options` all got full insert/update/delete
+  policies generated identically via a `do $$ loop` in `0003`, purely because nothing had built the
+  admin UI for them yet. This module is UI + Server Actions only for these six tables — **no new
+  migration** for them, confirmed directly against the migration files rather than assumed.
+- **One generic CRUD surface for all six, not six near-duplicates.** They share an identical shape
+  (`colours` swaps `description` for `hex_value`) and identical RLS for exactly that reason —
+  `/admin/builder/[table]` (list/new/edit) is one set of components parameterized by table.
+  `table` is validated against the literal 6-value `BuilderOptionTable` union
+  (`isBuilderOptionTable`, checked before it ever reaches `.from()`) — an invalid segment hits
+  `notFound()` and never touches the database. Verified live: the invalid-table case renders the
+  real not-found page rather than throwing, confirming the guard actually runs before any query.
+- **"Builder pricing" is editing `price_adjustment` on these same six tables, not a separate
+  engine.** `compute_builder_estimated_price` (`0022`) is a `stable` Postgres function that reads
+  each option's `price_adjustment` live on every call — there's no cached/derived price to
+  recalculate. Verified directly: calling the RPC before and after updating a fabric's
+  `price_adjustment` (50 → 75) shows the change take effect immediately, with no intermediate step
+  of any kind.
+- **Product images: reused Module 8's media library as a picker, no new Storage bucket.**
+  `docs/ARCHITECTURE.md`'s own Module 5 section had flagged this exact gap as Module 17's natural
+  fast-follow. `components/admin/media-picker.tsx` browses the existing `media` table (upload
+  inline via the existing `uploadMedia` action, or pick an already-uploaded image) and fills in
+  `ProductForm`'s existing `url`/`altText` row state — no shape change to `ImageRow`, manual
+  URL-paste stays available alongside it, purely additive.
+- **Inventory: one generic table, not three.** `inventory_items` (`0038`) covers fabrics, generic
+  materials, and embroidery materials via a `category` column, matching the plan's own "designed to
+  support" wording rather than three separate tables. `fabric_id` links stock to an actual
+  customer-facing fabric only when `category = 'fabric'` — generic materials and embroidery
+  supplies (thread, sequins, lining) have no natural FK to any existing table, since they're raw
+  supplies, not customer-facing style choices like `embroidery_types`. Admin-only RLS (`for all
+  using (is_admin())`), same shape as `order_notes`/`payment_transactions` — no staff/production
+  carve-out, since that gap is explicitly deferred to Module 26 project-wide, not something to
+  re-open here.
+- **`reserved_quantity` is admin-edited only, by explicit approval** — no bill-of-materials linking
+  products/builder configurations to material consumption exists anywhere in this schema, and
+  building one would be well beyond "designed to support." Staff adjust it by hand, same as they'd
+  do on a spreadsheet today. "Low stock" is derived (`stock_quantity - reserved_quantity <=
+  low_stock_threshold`) at read time, not stored — verified at both sides of the boundary (15
+  available against a threshold of 10 → not low stock; 8 available against the same threshold → is
+  low stock).
+- **Verified live**, continuing Module 16's authenticated-session technique:
+  `scripts/test-builder-inventory.mjs` covers builder-option CRUD through real RLS (admin
+  create/update/delete across two structurally-different tables, a plain customer blocked, public
+  read respecting `is_active`), the pricing-function live-update behavior, inventory RLS (admin-only,
+  customer blind scan returns nothing), the low-stock boundary, and all 13 new/changed admin routes
+  resolving with a genuine 200 via the same hand-built `@supabase/ssr` session cookie as Module 16.
+  Re-ran Module 16's own dashboard/nav-link script afterward — still all 22 routes pass, confirming
+  `/admin/builder` and `/admin/inventory` now render real content instead of `ComingSoon` without
+  breaking anything else in the shell.
+
 ## `lib/` layering
 
 - `lib/supabase/` — the only place Supabase clients are constructed. `client.ts` for Client

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { updateProduct } from "@/features/admin-catalog/actions";
 import { getActiveCategories } from "@/lib/catalog/get-categories";
+import { getMediaLibrary } from "@/lib/media/get-media";
 import { createClient } from "@/lib/supabase/server";
 import type { ProductWithImages } from "@/lib/catalog/get-products";
 
@@ -18,7 +19,7 @@ export default async function EditProductPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: product }, { data: seo }, categories] = await Promise.all([
+  const [{ data: product }, { data: seo }, categories, media] = await Promise.all([
     supabase.from("products").select("*, product_images(*)").eq("id", id).maybeSingle(),
     supabase
       .from("seo_metadata")
@@ -27,6 +28,7 @@ export default async function EditProductPage({
       .eq("entity_id", id)
       .maybeSingle(),
     getActiveCategories(),
+    getMediaLibrary(),
   ]);
 
   if (!product) notFound();
@@ -38,6 +40,7 @@ export default async function EditProductPage({
         key={`${product.id}-${product.updated_at}`}
         product={product as ProductWithImages}
         categories={categories}
+        media={media}
         seo={seo ?? undefined}
         action={updateProduct.bind(null, id)}
       />
