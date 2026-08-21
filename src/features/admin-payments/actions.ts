@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 
 import { logger } from "@/lib/logger";
+import { notify } from "@/lib/notifications/notify";
+import { balanceDueTemplate, depositPaidTemplate } from "@/lib/notifications/templates";
 import { getPaymentProvider } from "@/lib/payments";
 import { createClient } from "@/lib/supabase/server";
 import { createAdditionalPaymentSchema } from "@/lib/validations/payments";
@@ -11,7 +13,11 @@ export type ActionResult = { error: string } | { success: true };
 
 export async function markPaymentPaidManually(paymentId: string): Promise<ActionResult> {
   const supabase = await createClient();
-  const { data: payment } = await supabase.from("payments").select("status").eq("id", paymentId).single();
+  const { data: payment } = await supabase
+    .from("payments")
+    .select("status, type, amount, currency, order_id")
+    .eq("id", paymentId)
+    .single();
   if (!payment) return { error: "Payment not found." };
   if (payment.status === "succeeded") return { error: "Already marked as paid." };
 
@@ -23,6 +29,18 @@ export async function markPaymentPaidManually(paymentId: string): Promise<Action
   if (error) {
     logger.error("mark payment paid manually failed", error, { paymentId });
     return { error: "Could not update this payment. Please try again." };
+  }
+
+  const { data: order } = await supabase
+    .from("orders")
+    .select("customer_id, order_number")
+    .eq("id", payment.order_id)
+    .single();
+  if (order) {
+    await notify(supabase, {
+      profileId: order.customer_id,
+      ...depositPaidTemplate(order.order_number, payment.type, payment.amount, payment.currency),
+    });
   }
 
   revalidatePath("/admin/payments");
@@ -60,7 +78,11 @@ export async function createAdditionalPayment(orderId: string, formData: FormDat
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
 
   const supabase = await createClient();
-  const { data: order } = await supabase.from("orders").select("id, currency").eq("id", orderId).single();
+  const { data: order } = await supabase
+    .from("orders")
+    .select("id, currency, customer_id, order_number")
+    .eq("id", orderId)
+    .single();
   if (!order) return { error: "Order not found." };
 
   const { error } = await supabase.from("payments").insert({
@@ -76,6 +98,11 @@ export async function createAdditionalPayment(orderId: string, formData: FormDat
     logger.error("additional payment creation failed", error, { orderId });
     return { error: "Could not create that payment. Please try again." };
   }
+
+  await notify(supabase, {
+    profileId: order.customer_id,
+    ...balanceDueTemplate(order.order_number, parsed.data.amount, order.currency),
+  });
 
   revalidatePath("/admin/payments");
   return { success: true };

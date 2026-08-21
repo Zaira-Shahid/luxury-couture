@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 
 import { getAuthUser } from "@/lib/auth/session";
 import { logger } from "@/lib/logger";
+import { notify } from "@/lib/notifications/notify";
+import { productionStatusChangedTemplate, qcCompleteTemplate } from "@/lib/notifications/templates";
 import { createClient } from "@/lib/supabase/server";
 import { advanceProductionStatusSchema, updateProductionDetailsSchema } from "@/lib/validations/production";
 
@@ -48,15 +50,17 @@ export async function advanceProductionStatus(productionOrderId: string, formDat
     changed_by: user.id,
   });
 
-  const { data: order } = await supabase.from("orders").select("customer_id").eq("id", production.order_id).single();
+  const { data: order } = await supabase
+    .from("orders")
+    .select("customer_id, order_number")
+    .eq("id", production.order_id)
+    .single();
   if (order) {
-    await supabase.from("notifications").insert({
-      profile_id: order.customer_id,
-      type: "production_status_changed",
-      title: "Your order's production status has been updated",
-      body: `Production status is now: ${parsed.data.status.replace(/_/g, " ")}.`,
-      channel: "in_app",
-    });
+    const template =
+      parsed.data.status === "quality_check"
+        ? qcCompleteTemplate(order.order_number)
+        : productionStatusChangedTemplate(order.order_number, parsed.data.status);
+    await notify(supabase, { profileId: order.customer_id, ...template });
   }
 
   revalidatePath(`/admin/production/${productionOrderId}`);

@@ -1,6 +1,8 @@
 "use server";
 
 import { logger } from "@/lib/logger";
+import { notify } from "@/lib/notifications/notify";
+import { enquiryReceivedTemplate } from "@/lib/notifications/templates";
 import { createClient } from "@/lib/supabase/server";
 import { productEnquirySchema } from "@/lib/validations/enquiries";
 
@@ -43,6 +45,13 @@ export async function submitProductEnquiry(
     logger.error("product enquiry submission failed", error);
     return { error: "Something went wrong. Please try again." };
   }
+
+  await notify(supabase, {
+    profileId: user?.id ?? null,
+    email: user?.email ?? parsed.data.contactEmail,
+    phone: parsed.data.contactPhone || null,
+    ...enquiryReceivedTemplate(),
+  });
 
   return { success: true };
 }

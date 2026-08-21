@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 
 import { getAuthUser } from "@/lib/auth/session";
 import { logger } from "@/lib/logger";
+import { notify } from "@/lib/notifications/notify";
+import { orderConfirmedTemplate, orderMessageTemplate, orderStatusChangedTemplate, productionStartedTemplate } from "@/lib/notifications/templates";
 import { createClient } from "@/lib/supabase/server";
 import {
   addOrderNoteSchema,
@@ -32,7 +34,7 @@ export async function updateOrderStatus(orderId: string, formData: FormData): Pr
   const user = await getAuthUser();
   if (!user) return { error: "You must be signed in." };
 
-  const { data: order } = await supabase.from("orders").select("customer_id").eq("id", orderId).single();
+  const { data: order } = await supabase.from("orders").select("customer_id, order_number").eq("id", orderId).single();
   if (!order) return { error: "Order not found." };
 
   const { error: updateErr } = await supabase
@@ -51,13 +53,11 @@ export async function updateOrderStatus(orderId: string, formData: FormData): Pr
     changed_by: user.id,
   });
 
-  await supabase.from("notifications").insert({
-    profile_id: order.customer_id,
-    type: "order_status_changed",
-    title: "Your order status has been updated",
-    body: `Order status is now: ${parsed.data.status.replace(/_/g, " ")}.`,
-    channel: "in_app",
-  });
+  const template =
+    parsed.data.status === "confirmed"
+      ? orderConfirmedTemplate(order.order_number)
+      : orderStatusChangedTemplate(order.order_number, parsed.data.status);
+  await notify(supabase, { profileId: order.customer_id, ...template });
 
   revalidatePath(`/admin/orders/${orderId}`);
   revalidatePath(`/account/orders/${orderId}`);
@@ -97,15 +97,11 @@ export async function sendCustomerMessage(orderId: string, formData: FormData): 
   const { data: order } = await supabase.from("orders").select("customer_id").eq("id", orderId).single();
   if (!order) return { error: "Order not found." };
 
-  const { error } = await supabase.from("notifications").insert({
-    profile_id: order.customer_id,
-    type: "order_message",
-    title: parsed.data.title,
-    body: parsed.data.body,
-    channel: "in_app",
+  const { inAppSuccess } = await notify(supabase, {
+    profileId: order.customer_id,
+    ...orderMessageTemplate(parsed.data.title, parsed.data.body),
   });
-  if (error) {
-    logger.error("customer message send failed", error, { orderId });
+  if (!inAppSuccess) {
     return { error: "Could not send this message. Please try again." };
   }
 
@@ -140,6 +136,11 @@ export async function sendToProduction(orderId: string, formData: FormData): Pro
   if (error) {
     logger.error("send to production failed", error, { orderId });
     return { error: "Could not send this order to production. Please try again." };
+  }
+
+  const { data: order } = await supabase.from("orders").select("customer_id, order_number").eq("id", orderId).single();
+  if (order) {
+    await notify(supabase, { profileId: order.customer_id, ...productionStartedTemplate(order.order_number) });
   }
 
   revalidatePath(`/admin/orders/${orderId}`);

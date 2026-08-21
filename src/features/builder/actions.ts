@@ -1,6 +1,8 @@
 "use server";
 
 import { logger } from "@/lib/logger";
+import { notify } from "@/lib/notifications/notify";
+import { enquiryReceivedTemplate } from "@/lib/notifications/templates";
 import { createClient } from "@/lib/supabase/server";
 import { validateImageFile } from "@/lib/storage/validate-file";
 import { deleteFromStorage, randomStoragePath, uploadToStorage } from "@/lib/storage/upload-to-storage";
@@ -210,6 +212,13 @@ export async function requestQuotation(
     logger.error("builder quotation enquiry failed", enquiryErr, { configId });
     return { error: "Could not submit your request. Please try again." };
   }
+
+  await notify(supabase, {
+    profileId: user?.id ?? null,
+    email: user?.email ?? parsed.data.contactEmail,
+    phone: parsed.data.contactPhone || null,
+    ...enquiryReceivedTemplate(),
+  });
 
   return { success: true, data: undefined };
 }

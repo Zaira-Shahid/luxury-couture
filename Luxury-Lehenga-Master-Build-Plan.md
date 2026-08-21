@@ -1117,7 +1117,14 @@ Customer tracking page.
 
 # MODULE 15 — NOTIFICATIONS & AUTOMATION ENGINE
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
+
+(Templates are plain TS functions, not a DB-editable table — not asked for, and notification
+preferences/UI polish belong to Module 27, Customer Notification Center. Email/WhatsApp are mocked
+(logged, not sent) — no real provider credentials exist, same deferral as Modules 11/14's PayPal/
+courier decisions. SMS is entirely unbuilt, per the plan's own "SMS later." The review-request
+notification fires immediately alongside "delivered" rather than after a delay — no scheduler
+exists anywhere in this stack.)
 
 Create notification architecture.
 
@@ -2579,12 +2586,12 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULE 14 COMPLETE`
+`MODULE 15 COMPLETE`
 
 Current Module:
 
-`MODULE 14 — COMPLETE`
+`MODULE 15 — COMPLETE`
 
 Next Action:
 
-`Start Module 15`
+`Start Module 16`

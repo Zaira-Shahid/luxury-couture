@@ -3,6 +3,8 @@
 import { redirect } from "next/navigation";
 
 import { logger } from "@/lib/logger";
+import { notify } from "@/lib/notifications/notify";
+import { quoteApprovedTemplate } from "@/lib/notifications/templates";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -138,6 +140,8 @@ export async function acceptQuotation(quotationId: string, formData: FormData): 
       provider: "manual",
     });
   }
+
+  await notify(supabase, { profileId: user.id, email: user.email, ...quoteApprovedTemplate(order.order_number) });
 
   redirect(`/checkout/confirmed/${order.order_number}`);
 }

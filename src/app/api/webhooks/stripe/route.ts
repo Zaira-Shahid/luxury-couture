@@ -2,6 +2,8 @@ import { type NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 
 import { logger } from "@/lib/logger";
+import { notify } from "@/lib/notifications/notify";
+import { depositPaidTemplate } from "@/lib/notifications/templates";
 import { getStripeClient } from "@/lib/payments/stripe-client";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -50,11 +52,25 @@ export async function POST(request: NextRequest) {
         })
         .eq("id", paymentId)
         .eq("provider", "stripe")
-        .select("order_id")
+        .select("order_id, type, amount, currency")
         .single();
 
       if (payment) {
         await updateOrderAfterPayment(admin, payment.order_id);
+
+        const { data: order } = await admin
+          .from("orders")
+          .select("customer_id, order_number")
+          .eq("id", payment.order_id)
+          .single();
+        if (order) {
+          const { data: authUser } = await admin.auth.admin.getUserById(order.customer_id);
+          await notify(admin, {
+            profileId: order.customer_id,
+            email: authUser?.user?.email,
+            ...depositPaidTemplate(order.order_number, payment.type, payment.amount, payment.currency),
+          });
+        }
       } else {
         logger.warn("stripe webhook: payment row not found for checkout session", { paymentId });
       }
