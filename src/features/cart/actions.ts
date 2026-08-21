@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { trackServer } from "@/lib/analytics/track-server";
 import { logger } from "@/lib/logger";
 import { getOrCreateCartSessionId } from "@/lib/cart/session";
 import { createClient } from "@/lib/supabase/server";
@@ -32,6 +33,12 @@ export async function addProductToCart(productId: string, quantity = 1): Promise
     return { error: "Could not add that to your cart. Please try again." };
   }
 
+  await trackServer("add_to_cart", {
+    productId,
+    value: Number(product.base_price),
+    quantity,
+  });
+
   revalidatePath("/cart");
   return { success: true };
 }
@@ -57,6 +64,12 @@ export async function addBuilderConfigurationToCart(configurationId: string): Pr
     logger.error("add builder configuration to cart failed", error, { configurationId });
     return { error: error.message.includes("Sign in") ? error.message : "Could not add that to your cart." };
   }
+
+  await trackServer("add_to_cart", {
+    configurationId,
+    value: Number(config.estimated_price ?? 0),
+    quantity: 1,
+  });
 
   revalidatePath("/cart");
   return { success: true };

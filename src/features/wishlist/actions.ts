@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { trackServer } from "@/lib/analytics/track-server";
 import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
 
@@ -36,6 +37,12 @@ export async function toggleWishlist(productId: string): Promise<ActionResult> {
       return { error: "Could not update your wishlist. Please try again." };
     }
   }
+
+  await trackServer(
+    "wishlist_action",
+    { productId, action: existing ? "removed" : "added" },
+    { profileId: user.id }
+  );
 
   revalidatePath("/account/wishlist");
   return { success: true };

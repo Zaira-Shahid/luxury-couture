@@ -1,5 +1,6 @@
 "use server";
 
+import { trackServer } from "@/lib/analytics/track-server";
 import { logger } from "@/lib/logger";
 import { notify } from "@/lib/notifications/notify";
 import { enquiryReceivedTemplate } from "@/lib/notifications/templates";
@@ -48,7 +49,14 @@ export async function createConfiguration(
     logger.error("builder configuration create failed", error);
     return { error: "Could not save your design. Please try again." };
   }
-  return { success: true, data: data as BuilderConfiguration };
+
+  const created = data as BuilderConfiguration;
+  await trackServer("builder_started", {
+    configurationId: created.id,
+    productId: parsed.data.productId ?? undefined,
+  });
+
+  return { success: true, data: created };
 }
 
 export async function updateConfiguration(
@@ -140,6 +148,8 @@ export async function addInspirationImage(
     return { error: "Could not add that image. Please try again." };
   }
 
+  await trackServer("inspiration_uploaded", { configurationId: configId });
+
   return { success: true, data: data as InspirationImage };
 }
 
@@ -218,6 +228,14 @@ export async function requestQuotation(
     email: user?.email ?? parsed.data.contactEmail,
     phone: parsed.data.contactPhone || null,
     ...enquiryReceivedTemplate(),
+  });
+
+  // Submitting for a quotation is what "completed" means for a builder
+  // design — reaching the last step without submitting isn't a finished
+  // design, and counting it as one would overstate the funnel.
+  await trackServer("builder_completed", {
+    configurationId: configId,
+    value: Number(config.estimated_price ?? 0),
   });
 
   return { success: true, data: undefined };
