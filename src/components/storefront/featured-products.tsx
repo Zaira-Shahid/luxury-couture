@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { StorefrontImage } from "@/components/shared/storefront-image";
 import { ScrollReveal } from "@/components/motion/scroll-reveal";
 import { getFeaturedProducts } from "@/lib/catalog/get-featured";
 
@@ -20,13 +21,13 @@ export async function FeaturedProducts() {
         {products.map((product, i) => (
           <ScrollReveal key={product.id} delay={i * 0.05}>
             <Link href={`/products/${product.slug}`} className="group block">
-              <div className="aspect-[3/4] overflow-hidden rounded-lg bg-muted">
+              <div className="relative aspect-[3/4] overflow-hidden rounded-lg bg-muted">
                 {product.image_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <StorefrontImage
                     src={product.image_url}
                     alt={product.name}
-                    className="size-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
+                    className="object-cover transition-transform duration-500 group-hover:scale-105"
                   />
                 ) : (
                   <div className="size-full bg-gradient-to-br from-secondary to-muted" />

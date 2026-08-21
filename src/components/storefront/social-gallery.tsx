@@ -1,5 +1,6 @@
 import { ImageIcon } from "lucide-react";
 
+import { StorefrontImage } from "@/components/shared/storefront-image";
 import { ScrollReveal } from "@/components/motion/scroll-reveal";
 import { getInstagramProvider } from "@/lib/social";
 
@@ -17,14 +18,22 @@ export async function SocialGallery() {
           ? posts.map((post, i) => (
               <ScrollReveal key={post.id} delay={i * 0.04}>
                 {post.permalink ? (
-                  <a href={post.permalink} target="_blank" rel="noreferrer" className="block aspect-square overflow-hidden rounded-lg">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={post.imageUrl} alt={post.caption ?? ""} className="size-full object-cover" />
+                  <a href={post.permalink} target="_blank" rel="noreferrer" className="relative block aspect-square overflow-hidden rounded-lg">
+                    <StorefrontImage
+                      src={post.imageUrl}
+                      alt={post.caption ?? "Social gallery image"}
+                      sizes="(min-width: 640px) 16vw, 33vw"
+                      className="object-cover"
+                    />
                   </a>
                 ) : (
-                  <div className="aspect-square overflow-hidden rounded-lg">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={post.imageUrl} alt={post.caption ?? ""} className="size-full object-cover" />
+                  <div className="relative aspect-square overflow-hidden rounded-lg">
+                    <StorefrontImage
+                      src={post.imageUrl}
+                      alt={post.caption ?? "Social gallery image"}
+                      sizes="(min-width: 640px) 16vw, 33vw"
+                      className="object-cover"
+                    />
                   </div>
                 )}
               </ScrollReveal>

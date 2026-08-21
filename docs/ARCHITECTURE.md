@@ -1041,11 +1041,68 @@ canonical/OG/Twitter rules live, so no page can drift.
 - Both new settings keys (`seo.indexing_enabled`, `seo.google_site_verification`,
   `seo.twitter_handle`) needed **no migration** — `site_settings` is a key/value table, so they are
   just new cases in `applyRow`.
-- **Verified live** via `scripts/test-seo-pass1.mjs` (57 checks, self-cleaning, exits non-zero on
+- **Verified live** via `scripts/test-seo-pass1.mjs` (56 checks, self-cleaning, exits non-zero on
   failure): sitemap contents including the negative cases (a draft product and every private path
   must be absent), robots.txt in *both* indexing states, canonical/OG/Twitter tags, JSON-LD
   validity and field-level correctness, the override precedence chain, and the `</script>`
   escaping.
+
+## Content Management & Admin SEO — Pass 2 (Module 20)
+
+- **`faqs` (0045) is the only new table.** `blog_posts`, `pages`, `media` and `seo_metadata` all
+  already existed from Module 1 and had simply never been consumed. FAQs are a real table rather
+  than prose inside a `pages` row because Modules 22/23 need a "deterministic FAQ engine" over a
+  "safe knowledge source" — question/answer rows are that source, and neither the `FAQPage` schema
+  nor the future chatbot should have to parse HTML.
+- **CMS pages live at the root** (`/about`, `/terms`) via `(storefront)/[slug]`, an owner decision
+  over a `/pages/` prefix. Next.js always matches static segments before a dynamic one, so real
+  routes win outright — there's a test that inserts a page with slug `products` straight through
+  the service role (bypassing validation) and asserts `/products` still renders the catalog.
+- **`lib/routes/reserved-slugs.ts` is deliberately dependency-free** and shared by two callers that
+  must never disagree: `lib/validations/content.ts` rejects reserved slugs at write time, and
+  `lib/supabase/middleware.ts` skips them when deciding whether an unknown root path should 404.
+  It imports nothing because middleware runs on the Edge runtime.
+- **The soft-404 fix extends the Module 10 follow-up pass.** `notFound()` thrown during rendering
+  still returns HTTP 200 in this Next.js version (see the routing section above), and Pass 2 added
+  two more crawlable dynamic routes, so `middleware.ts` gained existence checks for `/blog/[slug]`
+  and the root CMS `[slug]`. The root check is the important one: without it *every* unknown URL
+  on the site returned 200 with not-found content, which is exactly the soft-404 Google penalises.
+  Verified against a real production build (`next build && next start`), not dev — the same
+  discipline that earlier pass established, because this is dev-mode-adjacent behavior.
+- **`components/shared/storefront-image.tsx` optimizes what it can prove is safe.** `next/image`
+  throws and takes the whole page down if the host isn't in `next.config.mjs`'s `remotePatterns`.
+  Catalog images are Supabase Storage URLs and always fine, but several admin fields (blog cover
+  image, share images) are free text, so an admin can paste anything. `StorefrontImage` uses
+  `next/image` for app-relative paths and the configured Supabase host, and falls back to a plain
+  `<img>` otherwise — an unoptimized image beats a 500 on a customer-facing page. `alt` is a
+  required prop, not optional-with-a-default. `next.config.mjs`'s hostname is now derived from
+  `NEXT_PUBLIC_SUPABASE_URL` (with the literal as fallback) so another Supabase project works
+  without editing the file.
+- **Scope call: the header logo stays a plain `<img>`.** It's intrinsically sized (`h-8 w-auto`)
+  with an unknown aspect ratio, so it fits neither `fill` (needs a sized parent) nor explicit
+  width/height. Admin, account and builder images are also unconverted — Module 28 owns that.
+- **`components/content/rich-text.tsx` renders plain text, never `dangerouslySetInnerHTML`.**
+  Piping stored content into the DOM would make the admin content editor a stored-XSS vector, and
+  no markdown renderer (or sanitizer) is a dependency of this project yet. Adding one is a real
+  decision for its own module, not a side effect of the SEO pass.
+- **`updateSeoDefaults` is scoped to the `seo.*` namespace only.** Module 25 owns the full admin
+  settings screen; a generic "write any key" action would pre-empt it *and* hand the client control
+  over which key gets written. Empty fields delete their row rather than storing `""`, so
+  `getSiteSettings()` falls back through to `siteConfig` as designed.
+- **Verified live** via `scripts/test-seo-pass2.mjs` (65 checks, self-cleaning, exits non-zero on
+  failure), run against a production build: published-vs-draft visibility for posts/pages/FAQs at
+  both the route and the RLS level (anonymous and plain-customer inserts/updates are rejected, not
+  merely filtered), the route-shadowing test above, FAQPage/BlogPosting structured data, footer
+  internal linking, per-entity overrides, and admin route authorization. Re-ran Modules 3, 4, 5, 10
+  and 18's own scripts afterwards with no regressions.
+- **A test-writing gotcha that contradicts Module 19's:** that module narrowed assertions to the
+  rendered `<tbody>` because dev-mode Next.js embeds unfiltered fetch responses in the RSC flight
+  payload. That does *not* generalise — with streaming, `<main>` is emitted nearly empty (~100
+  bytes) and the content arrives later in the payload, so a `<main>` slice makes every positive
+  check fail for the wrong reason. Whole-document checks are correct when the fetcher filters at
+  the *query* level (a draft row is never fetched, so it can't be in the payload). Only
+  fetch-then-filter-in-JS pages need a narrower signal — `/admin/seo`'s negative check asserts on a
+  `value="<uuid>"` attribute, which exists only in rendered markup.
 
 ## `lib/` layering
 
