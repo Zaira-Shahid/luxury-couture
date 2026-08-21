@@ -2,10 +2,18 @@ import type { Metadata } from "next";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getConsultationTypes } from "@/lib/consultations/get-types";
+import { buildMetadata } from "@/lib/seo/build-metadata";
 
 import { BookingForm } from "./booking-form";
 
-export const metadata: Metadata = { title: "Book a Consultation" };
+export async function generateMetadata(): Promise<Metadata> {
+  return buildMetadata({
+    title: "Book a Consultation",
+    description:
+      "Sit down with our design team to plan your bespoke lehenga — in person or virtually.",
+    path: "/consultations",
+  });
+}
 
 export default async function ConsultationsPage() {
   const consultationTypes = await getConsultationTypes();

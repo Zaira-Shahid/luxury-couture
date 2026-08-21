@@ -5,8 +5,19 @@ import { ProductCard } from "@/components/storefront/product-card";
 import { cn } from "@/lib/utils";
 import { getActiveCategories } from "@/lib/catalog/get-categories";
 import { getPublishedProducts } from "@/lib/catalog/get-products";
+import { buildMetadata } from "@/lib/seo/build-metadata";
 
-export const metadata: Metadata = { title: "Shop" };
+export async function generateMetadata(): Promise<Metadata> {
+  return buildMetadata({
+    title: "Shop",
+    description:
+      "Browse our collection of hand-crafted luxury lehengas, or start your own bespoke piece.",
+    // Category filtering is a `?category=` query param, so every filtered
+    // view canonicalises back to /products — this stops near-duplicate
+    // listings competing with each other in the index.
+    path: "/products",
+  });
+}
 
 export default async function ProductsPage({
   searchParams,

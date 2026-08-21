@@ -46,6 +46,17 @@ function applyRow(settings: SiteSettings, row: Row) {
     case "seo.default_og_image_url":
       settings.seo.defaultOgImageUrl = typeof row.value === "string" ? row.value : null;
       break;
+    case "seo.twitter_handle":
+      settings.seo.twitterHandle = typeof row.value === "string" ? row.value : null;
+      break;
+    case "seo.google_site_verification":
+      settings.seo.googleSiteVerification = typeof row.value === "string" ? row.value : null;
+      break;
+    case "seo.indexing_enabled":
+      // Stored as a JSON boolean, but tolerate the string form in case a
+      // row is ever written by hand via the Supabase dashboard.
+      settings.seo.indexingEnabled = row.value === true || row.value === "true";
+      break;
     case "homepage.seo_title":
       settings.homepage.seoTitle = typeof row.value === "string" ? row.value : null;
       break;

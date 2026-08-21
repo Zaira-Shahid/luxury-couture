@@ -4,8 +4,16 @@ import { BuilderShell } from "@/components/builder/builder-shell";
 import { getAuthUser } from "@/lib/auth/session";
 import { getBuilderOptionSets } from "@/lib/builder/get-options";
 import { getPublishedProducts, getProductBySlug } from "@/lib/catalog/get-products";
+import { buildMetadata } from "@/lib/seo/build-metadata";
 
-export const metadata: Metadata = { title: "Custom Builder" };
+export async function generateMetadata(): Promise<Metadata> {
+  return buildMetadata({
+    title: "Custom Builder",
+    description:
+      "Design your own lehenga — choose fabric, colour, embroidery, sleeves, neckline and dupatta.",
+    path: "/builder",
+  });
+}
 
 export default async function BuilderStartPage({
   searchParams,
