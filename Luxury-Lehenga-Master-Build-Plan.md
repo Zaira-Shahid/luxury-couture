@@ -1209,7 +1209,15 @@ Navigation:
 
 # MODULE 17 — ADMIN PRODUCT, BUILDER & INVENTORY MANAGEMENT
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
+
+(Builder pricing is editing price_adjustment on the six existing option tables, not a separate
+pricing engine — compute_builder_estimated_price already reads it live. Product images reuse
+Module 8's media library as a picker rather than a new Storage bucket, per its own flagged
+fast-follow. Inventory is one generic table [fabric/material/embroidery_material via a category
+column], not three; reserved_quantity stays admin-edited only, by explicit approval — no
+bill-of-materials system. No staff/production RLS carve-out for inventory — that gap stays
+deferred to Module 26 project-wide.)
 
 Admin can manage:
 
@@ -2593,12 +2601,12 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULE 16 COMPLETE`
+`MODULE 17 COMPLETE`
 
 Current Module:
 
-`MODULE 16 — COMPLETE`
+`MODULE 17 — COMPLETE`
 
 Next Action:
 
-`Start Module 17`
+`Start Module 18`

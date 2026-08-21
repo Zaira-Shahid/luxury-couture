@@ -4,12 +4,13 @@ import { Trash2 } from "lucide-react";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
+import { MediaPicker } from "@/components/admin/media-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { ActionResult } from "@/features/admin-catalog/actions";
-import type { Category } from "@/types/database";
+import type { Category, Media } from "@/types/database";
 import type { ProductWithImages } from "@/lib/catalog/get-products";
 
 type ImageRow = { url: string; altText: string; isPrimary: boolean };
@@ -17,11 +18,13 @@ type ImageRow = { url: string; altText: string; isPrimary: boolean };
 export function ProductForm({
   product,
   categories,
+  media,
   seo,
   action,
 }: {
   product?: ProductWithImages;
   categories: Category[];
+  media: Media[];
   seo?: { meta_title: string | null; meta_description: string | null };
   action: (formData: FormData) => Promise<ActionResult>;
 }) {
@@ -36,6 +39,9 @@ export function ProductForm({
 
   function addImageRow() {
     setImages((prev) => [...prev, { url: "", altText: "", isPrimary: prev.length === 0 }]);
+  }
+  function addImageRowFromMedia(url: string, altText: string) {
+    setImages((prev) => [...prev, { url, altText, isPrimary: prev.length === 0 }]);
   }
   function updateImageRow(index: number, patch: Partial<ImageRow>) {
     setImages((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -137,7 +143,7 @@ export function ProductForm({
       </div>
 
       <div>
-        <Label className="mb-2">Images (URL)</Label>
+        <Label className="mb-2">Images</Label>
         <div className="flex flex-col gap-2">
           {images.map((row, i) => (
             <div key={i} className="flex items-center gap-2">
@@ -170,9 +176,12 @@ export function ProductForm({
             </div>
           ))}
         </div>
-        <Button type="button" variant="outline" size="sm" className="mt-2" onClick={addImageRow}>
-          Add image
-        </Button>
+        <div className="mt-2 flex items-center gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={addImageRow}>
+            Add image URL
+          </Button>
+          <MediaPicker initialMedia={media} onPick={addImageRowFromMedia} />
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">

@@ -69,8 +69,8 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
       { href: "/admin/categories", label: "Categories", icon: Tags },
       { href: "/admin/measurements", label: "Measurements", icon: Ruler },
       { href: "/admin/media", label: "Media", icon: Image },
-      { href: "/admin/builder", label: "Builder", icon: Wand2, comingSoon: true },
-      { href: "/admin/inventory", label: "Inventory", icon: Boxes, comingSoon: true },
+      { href: "/admin/builder", label: "Builder", icon: Wand2 },
+      { href: "/admin/inventory", label: "Inventory", icon: Boxes },
     ],
   },
   {
