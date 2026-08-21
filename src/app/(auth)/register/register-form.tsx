@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function RegisterForm() {
+export function RegisterForm({ referralCode }: { referralCode: string }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -40,6 +40,10 @@ export function RegisterForm() {
           minLength={8}
           required
         />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="referralCode">Referral code (optional)</Label>
+        <Input id="referralCode" name="referralCode" defaultValue={referralCode} className="uppercase" />
       </div>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       <Button type="submit" disabled={isPending} className="mt-2 w-full">

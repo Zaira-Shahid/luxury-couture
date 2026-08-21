@@ -870,6 +870,63 @@ Quick reference for how this codebase is organized. For the full product roadmap
   characteristic as `notFound()` — 200, not a real 3xx — so the check is on rendered content, not
   status code). Re-ran Modules 16's and 17's own scripts afterward with no regressions.
 
+## Marketing & Customer Retention — Pass 1 (Module 19)
+
+- **Split into two passes by explicit agreement**: Pass 1 (this section) covers the
+  checkout/payment-linked features — coupons/discounts, loyalty points, referrals. Pass 2 covers
+  customer segments, campaigns, newsletter unsubscribe, promotional banners, and the abandoned-cart
+  cron job. `coupons`/`referrals`/`loyalty_accounts`/`loyalty_transactions` (`0010`) were schema-only
+  since Module 1 — this pass is the first thing to actually build on them.
+- **`coupons` genuinely has no customer-read RLS policy** — confirmed directly, not assumed: a
+  customer's own `SELECT` on `coupons` returns nothing (0009's own header comment: "codes can't be
+  scraped wholesale"). `validate_coupon`/`redeem_coupon` (`0041`) are the only way a customer
+  session can check a code at all — both `security definer`. `validate_coupon` is read-only, used
+  for the checkout "Apply" preview; `redeem_coupon` is the atomic, consuming version, locking the
+  coupon row (`for update`) so concurrent checkouts against a limited-use coupon can't both
+  succeed past `max_uses` — same race-safety discipline as `get_or_create_cart` (`0032`). Verified
+  live: two genuinely concurrent redemption attempts against a `max_uses = 1` coupon — exactly one
+  succeeds, `used_count` lands on exactly 1, never 0 or 2.
+- **The checkout preview is never trusted as final.** `placeOrder` re-validates via `redeem_coupon`
+  against the just-computed real subtotal (never the client's), matching this project's "never
+  trust client-submitted prices" discipline throughout checkout. Coupons only apply to `placeOrder`
+  (cart checkout), not `acceptQuotation` — a quotation's price is already a bespoke, admin-set
+  figure; a customer-facing promo code doesn't fit that model.
+- **Loyalty points**: `loyalty_accounts` was never auto-created anywhere (`0010`) — `handle_new_user()`
+  now also creates one at signup, the same trigger Module 15 already extended once for the welcome
+  notification. `earn_loyalty_points` is idempotent per `reference` (`payment:<id>` for real
+  payments) — a retried webhook delivery is a no-op, not a double award, matching the idempotency
+  bar `updateOrderAfterPayment` already set. Earn fires from both places a payment can actually
+  succeed (the Stripe webhook and `markPaymentPaidManually`). A dedicated `adjust_loyalty_points`
+  RPC (`0042`, a same-day follow-up) exists specifically so an admin manual correction is labeled
+  `'adjust'` in the customer's own history — reusing `earn`/`redeem` for that would have mislabeled
+  it. Redemption at checkout converts points to a capped discount (100 points = £1, `lib/loyalty/config.ts`
+  — the one place both checkout logic and every display read the rate from) and stacks with a
+  coupon if both are used.
+- **Referrals: admin-triggered completion, not automatic on the referred customer's first order** —
+  an explicit, approved scope call. Auto-completing would mean a new hook into `placeOrder` for a
+  low-frequency feature that benefits from a human sanity-check anyway (self-referral via a second
+  account, etc.). `referrals`' own RLS (`0010`) only lets the *referrer* insert/read their row and
+  only admin update it — the *referred* person has no path to it at all, so `redeem_referral_code`
+  (`security definer`) is the narrow exception that links a code to whoever signs up with it,
+  nothing else. Each code is single-use by the schema's own shape (one row per referral
+  relationship, not a standing reusable code) — a customer generates a new one per person they
+  invite. A completed referral's reward is credited as real, redeemable loyalty points on the
+  referrer's account, not just a number sitting on the `referrals` row.
+- **`orders.discount_amount`/`coupon_id`/`loyalty_points_redeemed`** (new columns, `0041`) are
+  computed and consumed *before* the order row is inserted — same "sequential awaits, best effort"
+  risk model this function already operates under (an `order_items` insert failing after `orders`
+  already succeeded isn't rolled back either); a coupon/points redemption succeeding right before
+  an unrelated order-insert failure is an accepted, pre-existing class of risk, not a new one this
+  pass introduced.
+- **Verified live** via `scripts/test-marketing-pass1.mjs` (two customers, an admin, cleaned up
+  after): every coupon rejection reason (inactive, expired, below minimum, unknown code, fixed
+  discount capped at subtotal), the concurrent-redemption race test above, loyalty earn
+  idempotency/redeem-insufficient-balance/adjust-either-sign, and the full referral lifecycle
+  (generate → self-referral blocked → redeemed by someone else → re-redemption blocked → unknown
+  code rejected). All new/changed routes resolve with a genuine 200 via the same authenticated-session
+  technique as Modules 16-18. Re-ran Module 11's and Module 16's own scripts afterward — both still
+  pass, confirming the webhook/admin-payments/admin-customers changes didn't regress anything.
+
 ## `lib/` layering
 
 - `lib/supabase/` — the only place Supabase clients are constructed. `client.ts` for Client

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { getCart } from "@/lib/cart/get-cart";
 import { logger } from "@/lib/logger";
+import { poundsToPoints, pointsToPounds } from "@/lib/loyalty/config";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { placeOrderSchema } from "@/lib/validations/checkout";
@@ -112,6 +113,58 @@ export async function placeOrder(formData: FormData): Promise<ActionResult> {
 
   const subtotal = Number(orderItemsInput.reduce((sum, i) => sum + i.line_total, 0).toFixed(2));
 
+  // Coupon and points redemption both happen before the order exists —
+  // same "sequential awaits, best effort" risk model already accepted
+  // throughout this function (e.g. a failed order_items insert after
+  // orders succeeds isn't rolled back either). Never trusts a client-
+  // computed discount: redeem_coupon re-validates against the real,
+  // just-computed subtotal, and is the atomic, consuming version (locks
+  // the coupon row) — never the read-only validate_coupon used for the
+  // checkout preview.
+  let discountAmount = 0;
+  let couponId: string | null = null;
+  if (parsed.data.couponCode) {
+    const { data: couponResult, error: couponErr } = await admin.rpc("redeem_coupon", {
+      p_code: parsed.data.couponCode,
+      p_subtotal: subtotal,
+    });
+    if (couponErr) return { error: couponErr.message || "That coupon code isn't valid." };
+    const row = couponResult?.[0];
+    if (row) {
+      couponId = row.coupon_id;
+      discountAmount += Number(row.discount_amount);
+    }
+  }
+
+  let pointsRedeemed = 0;
+  if (parsed.data.redeemPoints) {
+    const { data: loyaltyAccount } = await supabase
+      .from("loyalty_accounts")
+      .select("points_balance")
+      .eq("customer_id", user.id)
+      .maybeSingle();
+    const availablePoints = loyaltyAccount?.points_balance ?? 0;
+    const remainingAfterCoupon = Math.max(0, subtotal - discountAmount);
+    const maxRedeemablePoints = poundsToPoints(remainingAfterCoupon);
+    pointsRedeemed = Math.min(availablePoints, maxRedeemablePoints);
+
+    if (pointsRedeemed > 0) {
+      const { error: redeemErr } = await admin.rpc("redeem_loyalty_points", {
+        p_customer_id: user.id,
+        p_points: pointsRedeemed,
+        p_reference: `checkout:${crypto.randomUUID()}`,
+      });
+      if (redeemErr) {
+        logger.error("loyalty points redemption failed", redeemErr, { customerId: user.id });
+        pointsRedeemed = 0;
+      } else {
+        discountAmount += pointsToPounds(pointsRedeemed);
+      }
+    }
+  }
+
+  const totalAmount = Number(Math.max(0, subtotal - discountAmount).toFixed(2));
+
   const { data: order, error: orderErr } = await admin
     .from("orders")
     .insert({
@@ -120,8 +173,11 @@ export async function placeOrder(formData: FormData): Promise<ActionResult> {
       shipping_address_id: parsed.data.addressId,
       status: "pending",
       subtotal,
-      total_amount: subtotal,
-      balance_due_amount: subtotal,
+      total_amount: totalAmount,
+      balance_due_amount: totalAmount,
+      discount_amount: discountAmount,
+      coupon_id: couponId,
+      loyalty_points_redeemed: pointsRedeemed,
       notes: parsed.data.notes,
     })
     .select("id, order_number")
@@ -145,7 +201,7 @@ export async function placeOrder(formData: FormData): Promise<ActionResult> {
   await admin.from("payments").insert({
     order_id: order.id,
     type: "full",
-    amount: subtotal,
+    amount: totalAmount,
     status: "pending",
     provider: "manual",
   });

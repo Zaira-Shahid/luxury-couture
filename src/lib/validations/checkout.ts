@@ -15,4 +15,12 @@ export const placeOrderSchema = z.object({
     .optional()
     .or(z.literal(""))
     .transform((value) => (value ? value : null)),
+  couponCode: z
+    .string()
+    .trim()
+    .max(50)
+    .optional()
+    .or(z.literal(""))
+    .transform((value) => (value ? value.toUpperCase() : null)),
+  redeemPoints: z.coerce.boolean().optional(),
 });

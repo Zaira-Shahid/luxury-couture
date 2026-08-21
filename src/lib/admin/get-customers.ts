@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
-import type { Address, Order, Profile, Quotation } from "@/types/database";
+import type { Address, LoyaltyAccount, Order, Profile, Quotation, Referral } from "@/types/database";
 
 export type AdminCustomer = Profile & { orderCount: number; lifetimeSpend: number };
 
@@ -45,6 +45,8 @@ export type AdminCustomerDetail = {
   orders: Order[];
   quotations: Quotation[];
   addresses: Address[];
+  loyaltyAccount: LoyaltyAccount | null;
+  referrals: Referral[];
 };
 
 /**
@@ -55,12 +57,15 @@ export type AdminCustomerDetail = {
  */
 export async function getAdminCustomerDetail(id: string): Promise<AdminCustomerDetail | null> {
   const supabase = await createClient();
-  const [profileResult, ordersResult, quotationsResult, addressesResult] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", id).eq("role", "customer").single(),
-    supabase.from("orders").select("*").eq("customer_id", id).order("created_at", { ascending: false }),
-    supabase.from("quotations").select("*").eq("customer_id", id).order("created_at", { ascending: false }),
-    supabase.from("addresses").select("*").eq("customer_id", id).order("created_at", { ascending: false }),
-  ]);
+  const [profileResult, ordersResult, quotationsResult, addressesResult, loyaltyResult, referralsResult] =
+    await Promise.all([
+      supabase.from("profiles").select("*").eq("id", id).eq("role", "customer").single(),
+      supabase.from("orders").select("*").eq("customer_id", id).order("created_at", { ascending: false }),
+      supabase.from("quotations").select("*").eq("customer_id", id).order("created_at", { ascending: false }),
+      supabase.from("addresses").select("*").eq("customer_id", id).order("created_at", { ascending: false }),
+      supabase.from("loyalty_accounts").select("*").eq("customer_id", id).maybeSingle(),
+      supabase.from("referrals").select("*").eq("referrer_customer_id", id).order("created_at", { ascending: false }),
+    ]);
   if (profileResult.error || !profileResult.data) return null;
 
   const admin = createAdminClient();
@@ -72,5 +77,7 @@ export async function getAdminCustomerDetail(id: string): Promise<AdminCustomerD
     orders: (ordersResult.data ?? []) as Order[],
     quotations: (quotationsResult.data ?? []) as Quotation[],
     addresses: (addressesResult.data ?? []) as Address[],
+    loyaltyAccount: (loyaltyResult.data ?? null) as LoyaltyAccount | null,
+    referrals: (referralsResult.data ?? []) as Referral[],
   };
 }

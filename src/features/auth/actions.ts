@@ -10,6 +10,7 @@ import {
   registerSchema,
   resetPasswordSchema,
 } from "@/lib/validations/auth";
+import { referralCodeSchema } from "@/lib/validations/marketing";
 
 export type ActionResult = { error: string } | undefined;
 
@@ -25,8 +26,11 @@ export async function signUp(formData: FormData): Promise<ActionResult> {
   });
   if (!parsed.success) return { error: firstIssueMessage(parsed.error) };
 
+  const referralParsed = referralCodeSchema.safeParse({ code: formData.get("referralCode") });
+  const referralCode = referralParsed.success ? referralParsed.data.code : "";
+
   const supabase = await createClient();
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email: parsed.data.email,
     password: parsed.data.password,
     options: {
@@ -38,6 +42,20 @@ export async function signUp(formData: FormData): Promise<ActionResult> {
   if (error) {
     logger.warn("sign up failed", { message: error.message });
     return { error: error.message };
+  }
+
+  // Best-effort: an invalid/mistyped/already-used code should never block
+  // account creation, which has already succeeded by this point — just
+  // log it rather than surfacing an error for something the account
+  // itself doesn't depend on.
+  if (referralCode && data.user) {
+    const { error: referralError } = await supabase.rpc("redeem_referral_code", {
+      p_code: referralCode,
+      p_referred_customer_id: data.user.id,
+    });
+    if (referralError) {
+      logger.warn("referral code redemption failed", { message: referralError.message, referralCode });
+    }
   }
 
   redirect("/register/check-email");
