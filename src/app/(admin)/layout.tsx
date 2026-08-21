@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
-import { AdminNav } from "@/components/admin/admin-nav";
+import { AdminSidebar } from "@/components/admin/admin-sidebar";
+import { AdminTopbar } from "@/components/admin/admin-topbar";
 import { getProfile, isStaffRole } from "@/lib/auth/session";
 
 export default async function AdminLayout({
@@ -15,9 +16,12 @@ export default async function AdminLayout({
   if (!isStaffRole(profile.role)) redirect("/");
 
   return (
-    <div className="min-h-screen bg-muted/30">
-      <AdminNav />
-      {children}
+    <div className="flex min-h-screen bg-muted/30">
+      <AdminSidebar />
+      <div className="flex min-h-screen flex-1 flex-col">
+        <AdminTopbar profile={profile} />
+        <main className="flex-1">{children}</main>
+      </div>
     </div>
   );
 }

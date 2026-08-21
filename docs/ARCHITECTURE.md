@@ -702,6 +702,51 @@ Quick reference for how this codebase is organized. For the full product roadmap
   13's, and 14's own verification scripts afterward — all still pass, including a real end-to-end
   webhook delivery through the live route confirming the mock email fired correctly.
 
+## Admin Dashboard Foundation (Module 16)
+
+- **Scope checked against the plan's own later modules, not guessed.** The plan's Module 16 nav
+  list has ~20 items, but most are explicitly owned by a dedicated future module: Builder (admin
+  CRUD) and Inventory → Module 17; Reviews → Module 18; Marketing → Module 19; Content and SEO →
+  Module 20; Analytics (as a full section) → Module 21; Settings → Module 25. Building any of those
+  now would mean redoing them when their real module lands — each gets a `ComingSoon` placeholder
+  (the same component used throughout this project, e.g. `/account/orders` before Module 12) naming
+  the module that owns it, not new functionality. **Customers and Quotations have no owning module
+  and no schema gap** — both are plain reads over data that already exists (`profiles`, `orders`,
+  `quotations`) — so both got real pages this module, per explicit approval.
+- **Sidebar shell replaces the old flat top nav**, using the `--sidebar-*` design tokens that had
+  sat unused in `globals.css` since the design system was set up — clearly pre-planned for exactly
+  this. `components/admin/admin-nav-items.ts` is the single source of truth for the nav (grouped:
+  Overview/Sales/Operations/Catalog/Growth/System — visual grouping only, no items added or removed
+  beyond what the scope table above decided), shared between the desktop `AdminSidebar` (fixed
+  column) and a mobile slide-in panel (`AdminMobileNav` — plain `useState` toggle, no new
+  dependency; the storefront itself has no mobile nav to mirror, since `SiteHeader` just hides its
+  nav below the `sm` breakpoint rather than offering a drawer). `admin-nav.tsx` (the old flat bar)
+  was deleted, not kept alongside the new shell.
+- **`lib/admin/get-dashboard-stats.ts`** runs 13 aggregate queries in parallel (`Promise.all`),
+  using `{ count: "exact", head: true }` for pure counts rather than fetching row data — this
+  project's first use of that Supabase JS option, appropriate here since a dashboard querying 8+
+  aggregates has no reason to pull full rows over the wire. All of it rides the existing
+  `is_admin()` RLS path on each underlying table (`payments`, `orders`, `profiles`, `enquiries`,
+  `production_orders`, `shipping_orders`, `reviews`) — no new RLS needed, no new leak class
+  possible. "Analytics" on the dashboard is a small built-in this-week-vs-last-week order
+  comparison, not a charting library or new dependency — the real Analytics *section* (its own nav
+  item) stays `ComingSoon`, owned by Module 21.
+- **Customer email isn't in `profiles`** (it lives in `auth.users`) — `getAdminCustomerDetail`
+  fetches it via `auth.admin.getUserById`, the service-role client, on the **detail** page only,
+  not the list. Deliberate: listing customers doesn't need every email fetched up front (would mean
+  either an N+1 or a `listUsers()` call unrelated to what the list actually displays), and this
+  keeps the privileged lookup scoped to exactly the one row being viewed.
+- **Verified live**, and for the first time in this project, via a genuinely authenticated HTTP
+  session rather than only DB-mirrored logic: `scripts/test-admin-dashboard.mjs` hand-constructs
+  the real `@supabase/ssr` session cookie format (`sb-<project-ref>-auth-token`,
+  `base64-` + base64url-encoded session JSON — read directly from `node_modules/@supabase/ssr`'s
+  own cookie-parsing source rather than assumed) and fetches all 22 admin routes (the ~20 the plan
+  lists, plus `Categories`/`Media`, which are real working pages not in the plan's literal list but
+  kept rather than dropped) against a live `next dev` server — every one returned a genuine 200,
+  with zero server-side errors or warnings in the dev server log. Also confirmed an unauthenticated
+  request to `/admin` still redirects (not a 500), and RLS-checked that a plain customer account
+  gets nothing back from `profiles`/`quotations` while admin sees everything.
+
 ## `lib/` layering
 
 - `lib/supabase/` — the only place Supabase clients are constructed. `client.ts` for Client

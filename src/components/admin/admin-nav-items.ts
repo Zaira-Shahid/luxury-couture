@@ -1,0 +1,90 @@
+import {
+  BarChart3,
+  Boxes,
+  Calendar,
+  CreditCard,
+  Factory,
+  FileEdit,
+  FileText,
+  Image,
+  Inbox,
+  LayoutDashboard,
+  LayoutGrid,
+  Megaphone,
+  Package,
+  Ruler,
+  Search,
+  Settings,
+  ShoppingBag,
+  Star,
+  Tags,
+  Truck,
+  Users,
+  Wand2,
+  type LucideIcon,
+} from "lucide-react";
+
+export type AdminNavItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  /** Not built yet — points at a ComingSoon placeholder, labeled with the module that owns it. */
+  comingSoon?: boolean;
+};
+
+export type AdminNavGroup = { label: string; items: AdminNavItem[] };
+
+// Module 16 is the shell + Dashboard/Customers/Quotations — everything
+// else already has a real page from Modules 5-14, or is explicitly owned
+// by a later module (see docs/ARCHITECTURE.md's Module 16 section) and
+// gets a ComingSoon placeholder instead of being built early.
+export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
+  {
+    label: "Overview",
+    items: [{ href: "/admin", label: "Dashboard", icon: LayoutDashboard }],
+  },
+  {
+    label: "Sales",
+    items: [
+      { href: "/admin/orders", label: "Orders", icon: Package },
+      { href: "/admin/customers", label: "Customers", icon: Users },
+      { href: "/admin/quotations", label: "Quotations", icon: FileText },
+      { href: "/admin/payments", label: "Payments", icon: CreditCard },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      { href: "/admin/enquiries", label: "Enquiries", icon: Inbox },
+      { href: "/admin/appointments", label: "Appointments", icon: Calendar },
+      { href: "/admin/production", label: "Production", icon: Factory },
+      { href: "/admin/shipping", label: "Shipping", icon: Truck },
+    ],
+  },
+  {
+    label: "Catalog",
+    items: [
+      { href: "/admin/products", label: "Products", icon: ShoppingBag },
+      { href: "/admin/collections", label: "Collections", icon: LayoutGrid },
+      { href: "/admin/categories", label: "Categories", icon: Tags },
+      { href: "/admin/measurements", label: "Measurements", icon: Ruler },
+      { href: "/admin/media", label: "Media", icon: Image },
+      { href: "/admin/builder", label: "Builder", icon: Wand2, comingSoon: true },
+      { href: "/admin/inventory", label: "Inventory", icon: Boxes, comingSoon: true },
+    ],
+  },
+  {
+    label: "Growth",
+    items: [
+      { href: "/admin/reviews", label: "Reviews", icon: Star, comingSoon: true },
+      { href: "/admin/marketing", label: "Marketing", icon: Megaphone, comingSoon: true },
+      { href: "/admin/content", label: "Content", icon: FileEdit, comingSoon: true },
+      { href: "/admin/seo", label: "SEO", icon: Search, comingSoon: true },
+      { href: "/admin/analytics", label: "Analytics", icon: BarChart3, comingSoon: true },
+    ],
+  },
+  {
+    label: "System",
+    items: [{ href: "/admin/settings", label: "Settings", icon: Settings, comingSoon: true }],
+  },
+];

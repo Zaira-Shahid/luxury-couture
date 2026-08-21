@@ -1159,7 +1159,14 @@ For development, use mock/local notification providers.
 
 # MODULE 16 — ADMIN DASHBOARD FOUNDATION
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
+
+(Nav items explicitly owned by a later module — Builder/Inventory [17], Reviews [18], Marketing
+[19], Content/SEO [20], Analytics section [21], Settings [25] — get a ComingSoon placeholder
+naming that module, not new functionality, so they aren't rebuilt when their real module lands.
+Customers and Quotations had no owning module and no schema gap, so both got real pages now, per
+explicit approval. The dashboard's own "analytics" widget is a small built-in week-over-week order
+comparison, not a charting library — the full Analytics section stays deferred to Module 21.)
 
 Build premium responsive admin dashboard.
 
@@ -2586,12 +2593,12 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULE 15 COMPLETE`
+`MODULE 16 COMPLETE`
 
 Current Module:
 
-`MODULE 15 — COMPLETE`
+`MODULE 16 — COMPLETE`
 
 Next Action:
 
-`Start Module 16`
+`Start Module 17`
