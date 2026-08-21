@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 
 import { getActiveCollections } from "@/lib/catalog/get-collections";
 import { getPublishedProducts } from "@/lib/catalog/get-products";
+import { getPublishedBlogPosts, getPublishedPages } from "@/lib/content/get-content";
 import { absoluteUrl } from "@/lib/seo/urls";
 
 /**
@@ -24,12 +25,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: absoluteUrl("/collections"), changeFrequency: "weekly", priority: 0.8 },
     { url: absoluteUrl("/builder"), changeFrequency: "monthly", priority: 0.8 },
     { url: absoluteUrl("/consultations"), changeFrequency: "monthly", priority: 0.7 },
+    { url: absoluteUrl("/blog"), changeFrequency: "weekly", priority: 0.6 },
+    { url: absoluteUrl("/faq"), changeFrequency: "monthly", priority: 0.6 },
     { url: absoluteUrl("/contact"), changeFrequency: "yearly", priority: 0.5 },
   ];
 
-  const [products, collections] = await Promise.all([
+  const [products, collections, posts, pages] = await Promise.all([
     getPublishedProducts(),
     getActiveCollections(),
+    getPublishedBlogPosts(),
+    getPublishedPages(),
   ]);
 
   const productEntries: MetadataRoute.Sitemap = products.map((product) => ({
@@ -46,5 +51,26 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }));
 
-  return [...staticEntries, ...productEntries, ...collectionEntries];
+  const blogEntries: MetadataRoute.Sitemap = posts.map((post) => ({
+    url: absoluteUrl(`/blog/${post.slug}`),
+    lastModified: new Date(post.updated_at),
+    changeFrequency: "monthly",
+    priority: 0.6,
+  }));
+
+  // CMS pages live at the root (/about, /terms) — see (storefront)/[slug].
+  const pageEntries: MetadataRoute.Sitemap = pages.map((page) => ({
+    url: absoluteUrl(`/${page.slug}`),
+    lastModified: new Date(page.updated_at),
+    changeFrequency: "monthly",
+    priority: 0.5,
+  }));
+
+  return [
+    ...staticEntries,
+    ...productEntries,
+    ...collectionEntries,
+    ...blogEntries,
+    ...pageEntries,
+  ];
 }

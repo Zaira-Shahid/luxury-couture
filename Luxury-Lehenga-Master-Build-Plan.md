@@ -1317,17 +1317,28 @@ Paid email/SMS platforms can be connected later.
 
 # MODULE 20 — SEO & CONTENT MANAGEMENT
 
-Status: [~] IN PROGRESS — Pass 1 of 2 complete
+Status: [x] COMPLETE
 
-(Split into two passes by explicit agreement. Pass 1 — done: metadata/dynamic metadata, Open Graph,
-Twitter cards, canonical URLs, sitemap, robots.txt, and Product/Organization/Breadcrumb structured
-data, plus the visible breadcrumb trail. Pass 2 — not started: blog, CMS pages, FAQ schema, the
-admin SEO and Content screens, image optimization, footer internal linking, and Google Search
-Console documentation. Two scope calls agreed with the owner: CMS pages get root-level URLs
-(`/about`, `/faq`) rather than a `/pages/` prefix, and the `next/image` conversion covers public
-storefront components only — admin/account UI stays with Module 28, which owns performance.
-Note `seo.indexing_enabled` defaults to FALSE, so the site is deliberately un-indexable until the
-owner enables it at launch.)
+(Delivered in two passes by explicit agreement. Pass 1: metadata/dynamic metadata, Open Graph,
+Twitter cards, canonical URLs, sitemap, robots.txt, Product/Organization/WebSite/Breadcrumb
+structured data, and the visible breadcrumb trail. Pass 2: blog, root-level CMS pages, FAQs +
+FAQPage schema, BlogPosting schema, the admin SEO and Content screens, storefront image
+optimization, footer internal linking, and `docs/SEO.md` covering Google Search Console.
+
+Three scope calls agreed with the owner: CMS pages get root-level URLs (`/about`, `/faq`) rather
+than a `/pages/` prefix; the `next/image` conversion covers public storefront components only —
+admin/account UI stays with Module 28, which owns performance; and page/post body content renders
+as plain text rather than HTML/markdown, because rendering stored HTML would make the content
+editor a stored-XSS vector and adding a markdown renderer plus sanitizer is a dependency decision
+for its own module.
+
+Fixed along the way: the missing-`<title>` bug documented during Module 19, and a site-wide
+**soft 404** — every unknown URL returned HTTP 200 with not-found content, extending the Module 10
+follow-up pass's middleware approach to `/blog/[slug]` and the root CMS `[slug]`.
+
+⚠️ **`seo.indexing_enabled` defaults to FALSE.** The site is deliberately un-indexable — robots.txt
+blocks everything and every page sends `noindex` — until the owner ticks "Allow search engines to
+index this site" in Admin → SEO. **This must be turned on at launch.** See `docs/SEO.md`.)
 
 Implement:
 
@@ -2639,12 +2650,12 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULE 19 COMPLETE`
+`MODULE 20 COMPLETE`
 
 Current Module:
 
-`MODULE 19 — COMPLETE`
+`MODULE 20 — COMPLETE`
 
 Next Action:
 
-`Start Module 20`
+`Start Module 21`

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { StorefrontImage } from "@/components/shared/storefront-image";
 import { ScrollReveal } from "@/components/motion/scroll-reveal";
 import { getFeaturedCollections } from "@/lib/catalog/get-featured";
 
@@ -21,13 +22,13 @@ export async function FeaturedCollections() {
               href={`/collections/${collection.slug}`}
               className="group block overflow-hidden rounded-xl"
             >
-              <div className="aspect-[4/5] overflow-hidden bg-muted">
+              <div className="relative aspect-[4/5] overflow-hidden bg-muted">
                 {collection.cover_image_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <StorefrontImage
                     src={collection.cover_image_url}
                     alt={collection.name}
-                    className="size-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                    className="object-cover transition-transform duration-500 group-hover:scale-105"
                   />
                 ) : (
                   <div className="size-full bg-gradient-to-br from-secondary to-muted" />

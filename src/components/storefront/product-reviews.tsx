@@ -1,5 +1,6 @@
 import { Star } from "lucide-react";
 
+import { StorefrontImage } from "@/components/shared/storefront-image";
 import { getProductRatingSummary, getProductReviews } from "@/lib/reviews/get-reviews";
 
 function formatDate(iso: string) {
@@ -54,8 +55,14 @@ export async function ProductReviews({ productId }: { productId: string }) {
               <div className="mt-3 flex flex-wrap gap-2">
                 {review.review_media.map((media) =>
                   media.type === "image" ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img key={media.id} src={media.url} alt="" className="size-20 rounded-lg object-cover" />
+                    <div key={media.id} className="relative size-20 overflow-hidden rounded-lg">
+                      <StorefrontImage
+                        src={media.url}
+                        alt={`Customer photo for ${review.title ?? "this review"}`}
+                        sizes="80px"
+                        className="object-cover"
+                      />
+                    </div>
                   ) : (
                     <a
                       key={media.id}

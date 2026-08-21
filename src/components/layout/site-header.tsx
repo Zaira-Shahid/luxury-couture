@@ -23,9 +23,11 @@ export async function SiteHeader() {
         <div className="container flex h-16 items-center justify-between">
           <Link href="/" className="flex items-center font-heading text-xl tracking-wide">
             {settings.branding.logoUrl ? (
-              // Admin-supplied external URL (no Storage bucket / host
-              // allowlist yet) — next/image would throw on an unconfigured
-              // remote host, so a plain <img> is the correct choice here.
+              // Stays a plain <img> after Module 20's image pass: the logo
+              // is intrinsically sized (h-8 w-auto) with an aspect ratio we
+              // don't know ahead of time, so it fits neither next/image's
+              // `fill` (needs a sized parent) nor explicit width/height.
+              // StorefrontImage is for fixed-ratio content images instead.
               // eslint-disable-next-line @next/next/no-img-element
               <img src={settings.branding.logoUrl} alt={siteConfig.name} className="h-8 w-auto" />
             ) : (
