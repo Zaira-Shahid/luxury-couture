@@ -2,8 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { getActiveCollections } from "@/lib/catalog/get-collections";
+import { buildMetadata } from "@/lib/seo/build-metadata";
 
-export const metadata: Metadata = { title: "Collections" };
+export async function generateMetadata(): Promise<Metadata> {
+  return buildMetadata({
+    title: "Collections",
+    description: "Explore our curated lehenga collections, each designed around an occasion.",
+    path: "/collections",
+  });
+}
 
 export default async function CollectionsPage() {
   const collections = await getActiveCollections();

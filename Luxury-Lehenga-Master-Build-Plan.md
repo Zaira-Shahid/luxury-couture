@@ -1317,7 +1317,17 @@ Paid email/SMS platforms can be connected later.
 
 # MODULE 20 — SEO & CONTENT MANAGEMENT
 
-Status: [ ] NOT STARTED
+Status: [~] IN PROGRESS — Pass 1 of 2 complete
+
+(Split into two passes by explicit agreement. Pass 1 — done: metadata/dynamic metadata, Open Graph,
+Twitter cards, canonical URLs, sitemap, robots.txt, and Product/Organization/Breadcrumb structured
+data, plus the visible breadcrumb trail. Pass 2 — not started: blog, CMS pages, FAQ schema, the
+admin SEO and Content screens, image optimization, footer internal linking, and Google Search
+Console documentation. Two scope calls agreed with the owner: CMS pages get root-level URLs
+(`/about`, `/faq`) rather than a `/pages/` prefix, and the `next/image` conversion covers public
+storefront components only — admin/account UI stays with Module 28, which owns performance.
+Note `seo.indexing_enabled` defaults to FALSE, so the site is deliberately un-indexable until the
+owner enables it at launch.)
 
 Implement:
 

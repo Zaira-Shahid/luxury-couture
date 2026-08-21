@@ -3,6 +3,7 @@ import { Cormorant_Garamond, Geist } from "next/font/google";
 import { Toaster } from "sonner";
 
 import { siteConfig } from "@/lib/config/site";
+import { absoluteUrl } from "@/lib/seo/urls";
 import { getSiteSettings } from "@/lib/settings/get-site-settings";
 import { cn } from "@/lib/utils";
 
@@ -23,13 +24,38 @@ export async function generateMetadata(): Promise<Metadata> {
   const settings = await getSiteSettings();
   const title = settings.seo.defaultTitle ?? siteConfig.name;
   const description = settings.seo.defaultDescription ?? siteConfig.description;
+  const ogImage = settings.seo.defaultOgImageUrl;
 
   return {
     metadataBase: new URL(siteConfig.url),
     title: { default: title, template: `%s | ${title}` },
     description,
-    openGraph: settings.seo.defaultOgImageUrl
-      ? { images: [{ url: settings.seo.defaultOgImageUrl }] }
+    // Site-wide fallbacks. Public pages replace these wholesale via
+    // `buildMetadata` (@/lib/seo/build-metadata), which also sets the
+    // canonical URL — deliberately not set here, since a root-level
+    // canonical would wrongly point every uncustomised route at "/".
+    robots: settings.seo.indexingEnabled
+      ? { index: true, follow: true }
+      : { index: false, follow: false, nocache: true },
+    openGraph: {
+      type: "website",
+      siteName: title,
+      locale: "en_GB",
+      title,
+      description,
+      url: absoluteUrl("/"),
+      images: ogImage ? [{ url: ogImage, alt: title }] : undefined,
+    },
+    twitter: {
+      card: ogImage ? "summary_large_image" : "summary",
+      title,
+      description,
+      images: ogImage ? [ogImage] : undefined,
+      site: settings.seo.twitterHandle ?? undefined,
+    },
+    // Google Search Console HTML-tag verification (see docs/SEO.md).
+    verification: settings.seo.googleSiteVerification
+      ? { google: settings.seo.googleSiteVerification }
       : undefined,
     icons: settings.branding.faviconUrl ? { icon: settings.branding.faviconUrl } : undefined,
   };

@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import { Breadcrumbs } from "@/components/seo/breadcrumbs";
 import { ProductCard } from "@/components/storefront/product-card";
 import { getCollectionBySlug, getCollectionProducts } from "@/lib/catalog/get-collections";
+import { buildMetadata } from "@/lib/seo/build-metadata";
+import { getSeoMetadata } from "@/lib/seo/get-seo-metadata";
 
 export async function generateMetadata({
   params,
@@ -11,7 +14,16 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const collection = await getCollectionBySlug(slug);
-  return { title: collection?.name ?? "Collection" };
+  if (!collection) return { title: "Collection" };
+
+  const overrides = await getSeoMetadata("collection", collection.id);
+  return buildMetadata({
+    title: collection.name,
+    description: collection.description,
+    image: collection.cover_image_url,
+    path: `/collections/${collection.slug}`,
+    overrides,
+  });
 }
 
 export default async function CollectionDetailPage({
@@ -27,6 +39,14 @@ export default async function CollectionDetailPage({
 
   return (
     <div className="container py-16">
+      <Breadcrumbs
+        className="mb-8"
+        items={[
+          { name: "Home", path: "/" },
+          { name: "Collections", path: "/collections" },
+          { name: collection.name, path: `/collections/${collection.slug}` },
+        ]}
+      />
       <h1 className="font-heading text-4xl">{collection.name}</h1>
       {collection.description ? (
         <p className="mt-3 max-w-2xl text-muted-foreground">{collection.description}</p>
