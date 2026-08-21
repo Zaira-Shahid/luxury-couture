@@ -799,6 +799,77 @@ Quick reference for how this codebase is organized. For the full product roadmap
   `/admin/builder` and `/admin/inventory` now render real content instead of `ComingSoon` without
   breaking anything else in the shell.
 
+## Reviews, Testimonials & Social Proof (Module 18)
+
+- **A real RLS gap found and fixed, not assumed away.** `reviews`' own UPDATE policy (`0009`,
+  "author or admin") lets the review's author update *any* column on their own row, including
+  `is_published`/`is_featured`/`admin_response` — nothing in RLS actually stopped a customer from
+  self-publishing their own review by calling `supabase.from("reviews").update({is_published:
+  true})` directly with their own session, bypassing moderation entirely. This app's own code never
+  does that, but per this project's own discipline, RLS is the real boundary, not which buttons the
+  UI happens to show. Fixed the same way Module 2's `profiles.role` self-promotion gap was fixed
+  (`0017`/`0018`): a `before update` trigger, `security invoker` (not `definer` — `0018` found the
+  hard way that `security definer` makes `current_user` resolve to the function owner for every
+  caller, silently defeating a `current_user` check). Verified live: a customer's own attempt to
+  self-publish or self-feature their review is rejected by the trigger, while editing a harmless
+  field (title) on their own review still works, and admin can still publish/feature freely.
+- **`reviews.reviewer_name` — a deliberate, approved reversal of a documented prior decision.**
+  `getFeaturedTestimonials`'s own code comment explained why testimonials showed generic "Verified
+  Customer" attribution: `profiles` SELECT RLS is owner/admin-only, so joining a real name at read
+  time returns nothing for a public visitor, and the code deliberately chose not to open a new
+  public-read carve-out on `profiles`. That reasoning holds for a join-at-read-time approach — this
+  module instead captures a customer-chosen display name once at submission time (`reviewer_name`,
+  one new nullable column), the same snapshot pattern already used for
+  `enquiries.contact_name`/`appointments.contact_name`. `profiles`' RLS is never touched.
+- **Verified-purchase badge is `review.order_id !== null`, not a live join.** The schema's own
+  shape (`order_items.product_id`/`builder_configuration_id` both nullable, no constraint tying
+  exactly one) makes a live "did this customer buy this product" join genuinely ambiguous for
+  bespoke/builder orders. Sidestepped entirely: the submission flow only ever sets `order_id` after
+  validating (server-side, not trusted from the client) that the order actually belongs to the
+  reviewer and its shipment has reached `delivered` — so the stored `order_id` is trustworthy
+  without re-deriving anything at display time.
+- **The "Leave a Review" gate matches the exact signal that already fires Module 15's
+  `review_request` notification** — a shipment reaching `delivered`, not `orders.status` (which
+  Module 12 deliberately keeps unsynced from shipping status). Enforced server-side in
+  `submitReview` too, not just hidden in the UI: a tampered `orderId` or a `productId` not actually
+  in that order is rejected before anything is written.
+- **Photo testimonials reuse Module 8's upload pipeline with a new bucket; video testimonials are
+  references, not uploads.** `review-media` (new bucket, `0039`) mirrors `inspiration-images`/
+  `media`'s exact shape (public read, no client-write RLS, uploads go through a Server Action after
+  an in-app ownership check — here, `reviews.customer_id = auth.uid()`). Deliberately **not** the
+  existing `media` bucket/table: `media` is `is_admin()`-only RLS end to end, so a customer's own
+  photo written there could never be read back by them or by the public once the review is
+  published — review photos belong in `review_media` (already correctly scoped: visible whenever
+  the parent review is) with their own bucket for the files. No bucket anywhere accepts video MIME
+  types, matching the plan's own "video testimonial *references*" wording — a video is just an
+  external URL stored on `review_media.type = 'video'`, not a file.
+- **Instagram gallery abstraction mirrors Module 14's shipping-provider shape exactly** — one
+  `InstagramProvider` interface, one `MockInstagramProvider` (no real API credentials to integrate
+  against, same deferral as Modules 11/14/17's PayPal/courier/product-image decisions), a factory.
+  The mock isn't fake data — it reads `social_gallery_images` (new table, `0039`, same admin-write/
+  public-read-when-active shape as the six builder-option tables), so the "Instagram gallery" is
+  genuinely admin-curated today; a real Basic Display/Graph API implementation can swap in later
+  without touching `SocialGallery`.
+- **No new homepage sections — `Testimonials` and `SocialGallery` already existed and were already
+  mounted**, built ahead of this module with real (if empty) data plumbing and an explicit
+  placeholder comment on `SocialGallery`. This module filled in what was behind both slots rather
+  than adding new ones.
+- **No hard delete for reviews, by explicit approval** — `reviews` has no DELETE policy for anyone,
+  not even admin, unlike every other admin-deletable table in this project; that absence reads as
+  deliberate ("moderate by hiding, never erase outright"), so no delete action was built. Admin
+  moderation is publish/unpublish, feature/unfeature (only a published review can be featured), and
+  `admin_response`.
+- **Verified live** via `scripts/test-reviews.mjs` (two customers, an admin, cleaned up after): the
+  submission gate rejects a not-yet-delivered order and an order that isn't the caller's own; the
+  new self-moderation trigger blocks self-publish/self-feature while still allowing a harmless
+  field edit; `review_media` visibility follows its parent review and only the review's author can
+  attach media to it; `social_gallery_images` respects `is_active` for public read while staying
+  admin-write-only; all three new/changed routes resolve with a genuine 200 via the same
+  hand-built `@supabase/ssr` session cookie as Modules 16/17, including confirming the gated review
+  form never renders for an undelivered order (the same documented `redirect()`-during-render
+  characteristic as `notFound()` — 200, not a real 3xx — so the check is on rendered content, not
+  status code). Re-ran Modules 16's and 17's own scripts afterward with no regressions.
+
 ## `lib/` layering
 
 - `lib/supabase/` — the only place Supabase clients are constructed. `client.ts` for Client

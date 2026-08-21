@@ -5,6 +5,7 @@ import { AddToCartButton } from "@/components/storefront/add-to-cart-button";
 import { CustomizeTeaser } from "@/components/storefront/customize-teaser";
 import { ProductCard } from "@/components/storefront/product-card";
 import { ProductEnquiryForm } from "@/components/storefront/product-enquiry-form";
+import { ProductReviews, RatingSummary } from "@/components/storefront/product-reviews";
 import { ScrollReveal } from "@/components/motion/scroll-reveal";
 import { WishlistButton } from "@/components/storefront/wishlist-button";
 import { getAuthUser } from "@/lib/auth/session";
@@ -82,6 +83,7 @@ export default async function ProductDetailPage({
           <p className="mt-2 text-xl text-muted-foreground">
             {formatPrice(product.base_price, product.currency)}
           </p>
+          <RatingSummary productId={product.id} />
           {product.description ? (
             <p className="mt-6 text-muted-foreground">{product.description}</p>
           ) : null}
@@ -105,6 +107,8 @@ export default async function ProductDetailPage({
           </div>
         </div>
       </div>
+
+      <ProductReviews productId={product.id} />
 
       {related.length > 0 ? (
         <section className="mt-20">

@@ -509,6 +509,7 @@ export interface Review {
   rating: number;
   title: string | null;
   body: string | null;
+  reviewer_name: string | null;
   is_published: boolean;
   is_featured: boolean;
   admin_response: string | null;
@@ -522,6 +523,17 @@ export interface ReviewMedia {
   url: string;
   type: "image" | "video";
   created_at: ISODateTime;
+}
+
+export interface SocialGalleryImage {
+  id: UUID;
+  image_url: string;
+  caption: string | null;
+  link_url: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: ISODateTime;
+  updated_at: ISODateTime;
 }
 
 // ---- Marketing & loyalty -------------------------------------------------

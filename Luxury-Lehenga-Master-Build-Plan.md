@@ -1248,7 +1248,18 @@ Inventory should be designed to support:
 
 # MODULE 18 — REVIEWS, TESTIMONIALS & SOCIAL PROOF
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
+
+(Found and fixed a real RLS gap along the way: reviews' own UPDATE policy let the author
+self-publish/self-feature their own review, undermining "admin moderation required" — closed via a
+security-invoker trigger, same shape as Module 2's profiles.role self-promotion fix. reviewer_name
+is a customer-chosen snapshot captured at submission, not a live profiles join — a deliberate,
+approved reversal of the prior "generic Verified Customer" decision. Verified-purchase is
+order_id !== null, validated server-side at submission rather than re-derived via a live join.
+Video testimonials are external link references, not uploads — no bucket anywhere accepts video.
+Instagram gallery is admin-curated via social_gallery_images today, same mock-then-swap shape as
+every other provider abstraction in this project. No hard delete for reviews, matching the missing
+RLS delete policy's own signal.)
 
 Implement:
 
@@ -2601,12 +2612,12 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULE 17 COMPLETE`
+`MODULE 18 COMPLETE`
 
 Current Module:
 
-`MODULE 17 — COMPLETE`
+`MODULE 18 — COMPLETE`
 
 Next Action:
 
-`Start Module 18`
+`Start Module 19`
