@@ -59,9 +59,39 @@ export type EmailDraftInput = {
 
 export type EmailDraft = { subject: string; body: string };
 
+/**
+ * Module 23. Note what this returns: a fixed, structured shape — never
+ * prose, never a product list. The intent drives real SQL, so the AI
+ * decides only WHAT TO LOOK FOR, and the database decides what exists.
+ * That keeps the narrow-interface guarantee intact: still no general
+ * `complete()`, still no path through which a provider could write.
+ */
+export type QueryIntentResult = {
+  occasionSlug: string | null;
+  colourNames: string[];
+  fabricNames: string[];
+  categorySlug: string | null;
+  freeText: string;
+  isEmpty: boolean;
+};
+
+/** The real catalogue vocabulary a query may reference. Supplied by the caller. */
+export type QueryVocabularyInput = {
+  occasions: { slug: string; name: string }[];
+  colours: { slug: string; name: string }[];
+  fabrics: { slug: string; name: string }[];
+  categories: { slug: string; name: string }[];
+};
+
 export interface AiProvider {
   /** Human-readable id recorded in the ai_generations audit table. */
   readonly name: string;
+
+  /**
+   * Parses a discovery query into filters over the real catalogue.
+   * Returns an empty intent rather than a guess when nothing matches.
+   */
+  interpretQuery(query: string, vocabulary: QueryVocabularyInput): Promise<QueryIntentResult>;
 
   /** Answers a customer question from the FAQ knowledge base only. */
   answerQuestion(question: string): Promise<AiAnswer>;

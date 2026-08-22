@@ -2,6 +2,7 @@ import type { Product } from "@/types/database";
 
 import { applyGuardrails } from "./guardrails";
 import { matchFaq } from "./faq-matching";
+import { parseQueryIntent } from "./query-intent";
 import { buildFallbackMessage, getAiKnowledge } from "./knowledge";
 import type {
   AiAnswer,
@@ -10,6 +11,8 @@ import type {
   EmailDraft,
   EmailDraftInput,
   ProductDescriptionInput,
+  QueryIntentResult,
+  QueryVocabularyInput,
 } from "./provider";
 import { recommendProductIds } from "./recommendations";
 
@@ -54,6 +57,18 @@ export class DeterministicAiProvider implements AiProvider {
       confidence: match.confidence,
       fallbackMessage,
     };
+  }
+
+  /**
+   * Keyword matching against the real catalogue vocabulary. Cannot invent
+   * a colour or occasion that does not exist, because the vocabulary is
+   * the only thing it matches against.
+   */
+  async interpretQuery(
+    query: string,
+    vocabulary: QueryVocabularyInput
+  ): Promise<QueryIntentResult> {
+    return parseQueryIntent(query, vocabulary);
   }
 
   async recommendProducts(product: Product, limit: number): Promise<AiRecommendation[]> {

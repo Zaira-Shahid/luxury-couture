@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
-import { blogPostSchema, faqSchema, pageSchema } from "@/lib/validations/content";
+import { blogPostSchema, faqSchema, occasionSchema, pageSchema } from "@/lib/validations/content";
 
 export type ActionResult = { error: string } | undefined;
 
@@ -264,5 +264,87 @@ export async function deleteFaq(id: string): Promise<ActionResult> {
 
   revalidatePath("/admin/content");
   revalidatePath("/faq");
+  return undefined;
+}
+
+// ---- Occasions (Module 23) -----------------------------------------------
+
+function parseOccasion(formData: FormData) {
+  return occasionSchema.safeParse({
+    name: formData.get("name"),
+    slug: formData.get("slug"),
+    description: formData.get("description") || "",
+    sortOrder: formData.get("sortOrder") || 0,
+    isActive: formData.get("isActive") === "on",
+  });
+}
+
+export async function createOccasion(formData: FormData): Promise<ActionResult> {
+  const parsed = parseOccasion(formData);
+  if (!parsed.success) return { error: firstIssueMessage(parsed.error) };
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("occasions").insert({
+    name: parsed.data.name,
+    slug: parsed.data.slug,
+    description: parsed.data.description || null,
+    sort_order: parsed.data.sortOrder,
+    is_active: parsed.data.isActive,
+  });
+  if (error) {
+    logger.error("occasion creation failed", error);
+    return {
+      error: isUniqueViolation(error)
+        ? "An occasion with that slug already exists."
+        : "Could not create this occasion.",
+    };
+  }
+
+  revalidatePath("/admin/content");
+  revalidatePath("/products");
+  redirect("/admin/content");
+}
+
+export async function updateOccasion(id: string, formData: FormData): Promise<ActionResult> {
+  const parsed = parseOccasion(formData);
+  if (!parsed.success) return { error: firstIssueMessage(parsed.error) };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("occasions")
+    .update({
+      name: parsed.data.name,
+      slug: parsed.data.slug,
+      description: parsed.data.description || null,
+      sort_order: parsed.data.sortOrder,
+      is_active: parsed.data.isActive,
+    })
+    .eq("id", id);
+  if (error) {
+    logger.error("occasion update failed", error, { id });
+    return {
+      error: isUniqueViolation(error)
+        ? "An occasion with that slug already exists."
+        : "Could not update this occasion.",
+    };
+  }
+
+  revalidatePath("/admin/content");
+  revalidatePath("/products");
+  return undefined;
+}
+
+export async function deleteOccasion(id: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  // Join rows cascade (0048), so deleting an occasion also removes its
+  // product and builder-option links rather than leaving orphans.
+  const { error } = await supabase.from("occasions").delete().eq("id", id);
+  if (error) {
+    logger.error("occasion delete failed", error, { id });
+    return { error: "Could not delete this occasion." };
+  }
+
+  revalidatePath("/admin/content");
+  revalidatePath("/products");
   return undefined;
 }

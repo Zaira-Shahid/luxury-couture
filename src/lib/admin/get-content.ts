@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
-import type { BlogPost, Faq, Page } from "@/types/database";
+import type { BlogPost, Faq, Occasion, Page } from "@/types/database";
 
 /**
  * Admin content reads — unlike `lib/content/get-content.ts` these are
@@ -83,4 +83,57 @@ export async function getAdminFaq(id: string): Promise<Faq | null> {
     return null;
   }
   return (data ?? null) as Faq | null;
+}
+
+export async function getAdminOccasions(): Promise<Occasion[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("occasions")
+    .select("*")
+    .order("sort_order", { ascending: true });
+
+  if (error) {
+    logger.warn("failed to load admin occasions", { message: error.message });
+    return [];
+  }
+  return (data ?? []) as Occasion[];
+}
+
+export async function getAdminOccasion(id: string): Promise<Occasion | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("occasions").select("*").eq("id", id).maybeSingle();
+
+  if (error) {
+    logger.warn("failed to load admin occasion", { id, message: error.message });
+    return null;
+  }
+  return (data ?? null) as Occasion | null;
+}
+
+export type UnansweredQuestion = {
+  id: string;
+  content: string;
+  created_at: string;
+};
+
+/**
+ * The FAQ backlog (Module 23): questions customers asked that the
+ * assistant could not answer. This is the most actionable output of the
+ * chatbot — each row is a FAQ worth writing.
+ */
+export async function getUnansweredQuestions(limit = 50): Promise<UnansweredQuestion[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("chat_messages")
+    .select("id, content, created_at")
+    .eq("role", "user")
+    .eq("unanswered", true)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    logger.warn("failed to load unanswered questions", { message: error.message });
+    return [];
+  }
+  return (data ?? []) as UnansweredQuestion[];
 }

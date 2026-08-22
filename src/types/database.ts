@@ -672,6 +672,53 @@ export interface Faq {
   updated_at: ISODateTime;
 }
 
+/** Module 23: what a piece is FOR — the taxonomy driving occasion discovery. */
+export interface Occasion {
+  id: UUID;
+  name: string;
+  slug: string;
+  description: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: ISODateTime;
+  updated_at: ISODateTime;
+}
+
+export interface ProductOccasion {
+  product_id: UUID;
+  occasion_id: UUID;
+  created_at: ISODateTime;
+}
+
+/** Polymorphic over the six BUILDER_OPTION_TABLES — see 0048. */
+export interface BuilderOptionOccasion {
+  option_table: BuilderOptionTable;
+  option_id: UUID;
+  occasion_id: UUID;
+  created_at: ISODateTime;
+}
+
+export type ChatRole = "user" | "assistant";
+
+export interface ChatConversation {
+  id: UUID;
+  session_id: string;
+  profile_id: UUID | null;
+  created_at: ISODateTime;
+  updated_at: ISODateTime;
+}
+
+export interface ChatMessage {
+  id: UUID;
+  conversation_id: UUID;
+  role: ChatRole;
+  content: string;
+  source_faq_id: UUID | null;
+  /** True when the assistant had no answer — the FAQ backlog signal. */
+  unanswered: boolean;
+  created_at: ISODateTime;
+}
+
 /** Module 22: audit trail of AI-generated drafts an admin was offered. */
 export interface AiGeneration {
   id: UUID;

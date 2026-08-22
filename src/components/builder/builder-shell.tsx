@@ -60,6 +60,7 @@ export function BuilderShell({
   products,
   isSignedIn,
   initialProductId,
+  occasionLabels,
 }: {
   initialConfig: BuilderConfiguration | null;
   initialImages: InspirationImage[];
@@ -67,6 +68,16 @@ export function BuilderShell({
   products: ProductWithImages[];
   isSignedIn: boolean;
   initialProductId?: string | null;
+  /**
+   * Module 23 builder guidance, keyed by builder-option table. Only the
+   * fabric, colour and embroidery steps have curated occasion data, so
+   * the other steps simply receive nothing and render unchanged.
+   */
+  occasionLabels?: {
+    fabrics?: Record<string, string[]>;
+    colours?: Record<string, string[]>;
+    embroidery_types?: Record<string, string[]>;
+  };
 }) {
   const router = useRouter();
   const [step, setStep] = useState(0);
@@ -139,6 +150,7 @@ export function BuilderShell({
               options={options.fabrics}
               selectedId={selections.fabricId}
               onSelect={(id) => updateSelection("fabricId", id)}
+              occasionLabels={occasionLabels?.fabrics}
             />
           ) : null}
           {step === 2 ? (
@@ -148,6 +160,7 @@ export function BuilderShell({
               options={options.embroidery}
               selectedId={selections.embroideryTypeId}
               onSelect={(id) => updateSelection("embroideryTypeId", id)}
+              occasionLabels={occasionLabels?.embroidery_types}
             />
           ) : null}
           {step === 3 ? (
@@ -157,6 +170,7 @@ export function BuilderShell({
               options={options.colours}
               selectedId={selections.colourId}
               onSelect={(id) => updateSelection("colourId", id)}
+              occasionLabels={occasionLabels?.colours}
             />
           ) : null}
           {step === 4 ? (
