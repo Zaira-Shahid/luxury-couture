@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildTransactionalEmail, getEmailBrand } from "@/lib/email/layout";
 import { sendEmail } from "@/lib/email/send";
 import { logger } from "@/lib/logger";
+import { getSiteSettings } from "@/lib/settings/get-site-settings";
 
 import { sendMockWhatsApp } from "./mock-channels";
 
@@ -66,6 +67,12 @@ export async function notify(
 
   if (email) {
     try {
+      // Module 25: an admin can switch order/payment emails off. The
+      // in-app notification above still fires, so the customer is never
+      // left with no record at all.
+      const settings = await getSiteSettings();
+      if (!settings.notifications.orderEmailsEnabled) return { inAppSuccess };
+
       const brand = await getEmailBrand();
       const rendered = buildTransactionalEmail(brand, {
         heading: title,

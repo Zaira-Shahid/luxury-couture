@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getMoneyFormatter } from "@/lib/settings/get-money-formatter";
+import { getSiteSettings } from "@/lib/settings/get-site-settings";
 
 
 import { EventTracker } from "@/components/analytics/event-tracker";
@@ -18,6 +19,7 @@ export const metadata: Metadata = { title: "Checkout" };
 export default async function CheckoutPage() {
   // Module 25: currency and locale come from Admin -> Settings.
   const { format: formatPrice } = await getMoneyFormatter();
+  const settings = await getSiteSettings();
   // Orders require an account (orders.customer_id is not-null by design,
   // per Module 1's own "all writes happen server-side once validated"
   // intent) — checkout can't proceed as a guest, unlike the cart itself.
@@ -59,6 +61,20 @@ export default async function CheckoutPage() {
             <span>Estimated total</span>
             <span>{formatPrice(total)}</span>
           </div>
+
+          {settings.store.taxRate > 0 ? (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {settings.store.taxInclusive
+                ? `Includes ${settings.store.taxLabel} at ${settings.store.taxRate}%.`
+                : `${settings.store.taxLabel} at ${settings.store.taxRate}% is added at checkout.`}
+            </p>
+          ) : null}
+          {settings.orders.depositPercent > 0 && settings.orders.depositPercent < 100 ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              A {settings.orders.depositPercent}% deposit is taken now; the balance is due before
+              your piece ships.
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 

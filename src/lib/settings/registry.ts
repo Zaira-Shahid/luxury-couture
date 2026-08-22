@@ -30,6 +30,11 @@
 export type SettingSection =
   | "general"
   | "theme"
+  | "store"
+  | "orders"
+  | "builder"
+  | "shipping"
+  | "notifications"
   | "seo"
   | "analytics"
   | "ai";
@@ -222,6 +227,107 @@ export const SETTINGS_REGISTRY: SettingEntry[] = [
     options: FONT_PRESETS.map((f) => ({ value: f.value, label: f.label })),
   },
 
+  // ---- Store ------------------------------------------------------------
+  {
+    key: "store.tax_rate",
+    path: ["store", "taxRate"],
+    section: "store",
+    type: "number",
+    label: "Tax rate (%)",
+    help: "Applied to every new order after discounts. Leave at 0 for no tax. A single flat rate — per-product VAT classes and destination-based rules are not supported.",
+    placeholder: "20",
+  },
+  {
+    key: "store.tax_inclusive",
+    path: ["store", "taxInclusive"],
+    section: "store",
+    type: "boolean",
+    label: "Prices already include tax",
+    help: "When on, your listed prices are treated as tax-inclusive and the tax is shown as a breakdown rather than added on top.",
+  },
+  {
+    key: "store.tax_label",
+    path: ["store", "taxLabel"],
+    section: "store",
+    type: "text",
+    label: "Tax label",
+    help: "What to call it on the checkout summary and invoices.",
+    placeholder: "VAT",
+  },
+  {
+    key: "store.low_stock_threshold",
+    path: ["store", "lowStockThreshold"],
+    section: "store",
+    type: "number",
+    label: "Low stock warning at",
+    help: "Inventory at or below this level is flagged in the admin.",
+    placeholder: "5",
+  },
+
+  // ---- Orders -----------------------------------------------------------
+  {
+    key: "orders.deposit_percent",
+    path: ["orders", "depositPercent"],
+    section: "orders",
+    type: "number",
+    label: "Deposit required (%)",
+    help: "Taken up front on cart checkout, with the balance due before shipping. Leave at 0 to charge the full amount at once. Quotations keep their own per-quote deposit.",
+    placeholder: "50",
+  },
+
+  // ---- Builder ----------------------------------------------------------
+  {
+    key: "builder.enabled",
+    path: ["builder", "enabled"],
+    section: "builder",
+    type: "boolean",
+    label: "Custom builder available to customers",
+    help: "Turning this off hides the builder and removes it from the navigation.",
+  },
+  {
+    key: "builder.require_inspiration",
+    path: ["builder", "requireInspiration"],
+    section: "builder",
+    type: "boolean",
+    label: "Require an inspiration image before submitting",
+  },
+
+  // ---- Shipping ---------------------------------------------------------
+  {
+    key: "shipping.free_threshold",
+    path: ["shipping", "freeThreshold"],
+    section: "shipping",
+    type: "number",
+    label: "Free shipping over",
+    help: "Order value above which shipping is not charged. Leave at 0 to always charge.",
+  },
+  {
+    key: "shipping.default_cost",
+    path: ["shipping", "defaultCost"],
+    section: "shipping",
+    type: "number",
+    label: "Default shipping cost",
+    help: "Applied when no other rate is known.",
+  },
+
+  // ---- Notifications ----------------------------------------------------
+  {
+    key: "notifications.order_emails_enabled",
+    path: ["notifications", "orderEmailsEnabled"],
+    section: "notifications",
+    type: "boolean",
+    label: "Send order and payment emails",
+    help: "Confirmations, payment receipts, production and shipping updates. Turning this off leaves customers with only the in-app notification feed.",
+  },
+  {
+    key: "notifications.marketing_emails_enabled",
+    path: ["notifications", "marketingEmailsEnabled"],
+    section: "notifications",
+    type: "boolean",
+    label: "Send marketing emails",
+    help: "Campaigns and abandoned-cart recovery. Customer opt-outs are always honoured regardless of this switch.",
+  },
+
   // ---- SEO --------------------------------------------------------------
   {
     key: "seo.default_description",
@@ -310,13 +416,29 @@ export const SETTINGS_REGISTRY: SettingEntry[] = [
 export const SECTION_LABELS: Record<SettingSection, string> = {
   general: "General",
   theme: "Theme",
+  store: "Store",
+  orders: "Orders",
+  builder: "Builder",
+  shipping: "Shipping",
+  notifications: "Notifications",
   seo: "SEO",
   analytics: "Analytics",
   ai: "AI",
 };
 
 /** Section order in the admin tabs. */
-export const SECTION_ORDER: SettingSection[] = ["general", "theme", "seo", "analytics", "ai"];
+export const SECTION_ORDER: SettingSection[] = [
+  "general",
+  "theme",
+  "store",
+  "orders",
+  "builder",
+  "shipping",
+  "notifications",
+  "seo",
+  "analytics",
+  "ai",
+];
 
 export function entriesForSection(section: SettingSection): SettingEntry[] {
   return SETTINGS_REGISTRY.filter((entry) => entry.section === section);
