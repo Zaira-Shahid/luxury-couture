@@ -1,5 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server";
 
+import { emailUrl } from "@/lib/email";
+import { sendEmail } from "@/lib/email/send";
+import { abandonedCartEmail } from "@/lib/email/templates";
 import { logger } from "@/lib/logger";
 import { siteConfig } from "@/lib/config/site";
 import { abandonedCartTemplate } from "@/lib/notifications/templates";
@@ -49,11 +52,35 @@ export async function GET(request: NextRequest) {
     const { data: authUser } = await admin.auth.admin.getUserById(row.customer_id);
     if (!authUser?.user?.email) continue;
 
+    // MODULE 24: an abandoned-cart email is MARKETING, not transactional
+    // — a promotional nudge, not a record of something the customer did.
+    // It therefore needs an opt-out check and an unsubscribe link, which
+    // this previously sent without. The in-app notification still goes
+    // through notify(); only the email path changed.
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("marketing_opt_out, marketing_unsubscribe_token, full_name")
+      .eq("id", row.customer_id)
+      .maybeSingle();
+
+    // Fail closed: no profile row means we cannot confirm consent.
+    if (!profile || profile.marketing_opt_out) continue;
+
     await notify(admin, {
       profileId: row.customer_id,
-      email: authUser.user.email,
+      // Email suppressed here on purpose — sent below through the
+      // marketing path so it carries an unsubscribe link.
+      email: null,
       ...abandonedCartTemplate(siteConfig.url),
     });
+
+    await sendEmail(
+      await abandonedCartEmail(
+        authUser.user.email,
+        (profile.full_name as string | null) ?? null,
+        emailUrl(`/unsubscribe?token=${profile.marketing_unsubscribe_token}`)
+      )
+    );
     notified += 1;
   }
 

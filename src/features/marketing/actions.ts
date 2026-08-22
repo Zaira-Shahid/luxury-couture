@@ -52,3 +52,29 @@ export async function unsubscribeFromNewsletter(token: string): Promise<ActionRe
 
   return { success: true };
 }
+
+/**
+ * Marketing opt-out for a customer ACCOUNT, as opposed to a newsletter
+ * subscriber. Added in Module 24 because customer-segment campaigns
+ * (VIP / new / at-risk) previously had no opt-out mechanism at all.
+ *
+ * Same shape as unsubscribeFromNewsletter: a security definer RPC (0051)
+ * because the person following the link is not signed in, and profiles'
+ * RLS only permits updating your own row.
+ *
+ * Both are called blind by the unsubscribe page — one of them matches a
+ * real token and the other is a no-op, and neither reveals which. That
+ * is deliberate: confirming a token's validity to an anonymous caller
+ * would leak whether an account or subscription exists.
+ */
+export async function unsubscribeFromMarketing(token: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("unsubscribe_marketing", { p_token: token });
+
+  if (error) {
+    logger.warn("marketing unsubscribe failed", { message: error.message });
+    return { error: "Something went wrong. Please try again." };
+  }
+
+  return { success: true };
+}
