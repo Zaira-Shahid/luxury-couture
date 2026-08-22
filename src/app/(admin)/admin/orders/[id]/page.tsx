@@ -201,7 +201,12 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
           <CardTitle className="text-base">Message Customer</CardTitle>
         </CardHeader>
         <CardContent>
-          <SendMessageForm orderId={order.id} />
+          <SendMessageForm
+            orderId={order.id}
+            orderNumber={order.order_number}
+            orderStatus={ORDER_STATUS_LABELS[order.status] ?? order.status}
+            customerName={customer?.full_name ?? null}
+          />
         </CardContent>
       </Card>
 
