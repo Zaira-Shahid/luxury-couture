@@ -1212,6 +1212,58 @@ Operational detail is in `docs/AI.md`. The architectural points:
   thinking, low effort) and the fallback paths are tested, but no successful live response has been
   observed. Same deferral Modules 11/14 made for PayPal and couriers.
 
+## Customer Chatbot & Recommendations (Module 23)
+
+Operational detail is in `docs/AI.md`. The architectural points:
+
+- **The AI never writes the product list — it only parses the question into filters.** This is the
+  module's central decision. The one capability added to `AiProvider` is `interpretQuery`, which
+  returns a fixed structured intent (occasion/colour/fabric/category/freeText); that intent drives
+  ordinary SQL, and the customer sees real rows. It keeps Module 22's guarantee intact —
+  classification returning a fixed shape, still no general `complete()`, still no write path — and
+  it is what "AI responses must be clearly constrained by business data" means in practice.
+  **Do not add a free-text generation method to `AiProvider` in any later module.**
+- **The Claude implementation re-validates its own output** against the real vocabulary before any
+  value becomes a filter, so a model that ignores the instruction and invents "peacock blue" has
+  the filter dropped rather than injected.
+- **`query-intent.ts` is deliberately import-free**, like `guardrails.ts` and `faq-matching.ts`, so
+  `scripts/test-chatbot.mjs` can import the `.ts` directly under Node type stripping and test it
+  exhaustively. Keep it dependency-free.
+- **Rate limiting is the first in the project** and is checked *before* any provider call or
+  catalogue read. `/api/analytics` shipped without it (deferred to Module 29) and that was
+  defensible — an abusive burst there costs database rows. Chat is a different risk class: with a
+  key set, every request spends money. It is table-backed because serverless instances share no
+  memory, and it **fails closed** — if the limiter itself errors the request is refused, since a
+  refused message is an inconvenience and an unlimited paid endpoint is not.
+- **Occasions (0048) are two join tables, not one**: products are a single table, builder options
+  span six, so the builder side is polymorphic on `(option_table, option_id)` — the shape
+  `seo_metadata` (0011) already uses. A real FK per option table would mean six nullable columns.
+- **An occasion nobody has tagged returns nothing, not everything.** The filter deliberately has no
+  unfiltered fallback: silently showing bridal pieces to someone asking for party wear is worse
+  than showing none.
+- **Chat tables are admin-read-only with no insert policy at all**; writes go through the
+  service-role client in the route handler, so a visitor cannot forge a transcript or read anyone
+  else's. `chat_rate_limits` has *no* policies — deny-by-default, since nobody should read counters.
+- **`unanswered` is flagged on the USER message, not the reply**, so the admin backlog reads user
+  rows directly instead of walking back from an assistant row.
+- **Fixed a defect introduced in Module 20:** `websiteSchema()` advertised a `SearchAction` at
+  `/products?q=` to Google before any such search existed. `?q=` is now real, and the products page
+  has a search box.
+- **Bug worth remembering — a silently swallowed insert error.** `chat_messages` wrote nothing at
+  all while reporting success: PostgREST rejects a bulk insert whose objects have *different key
+  sets* ("All object keys must match"), and the insert's error was never checked. Both objects now
+  carry an identical key set and the error is checked. Two lessons: give every bulk-insert object
+  the same keys, and never discard a Supabase `error` even on a best-effort write path.
+- **Verified live** via `scripts/test-chatbot.mjs` (68 checks, self-cleaning, non-zero exit on
+  failure) against a production build: intent parsing including the must-not-invent cases, FAQ-vs-
+  discovery routing, endpoint validation, answers coming only from seeded FAQs, draft products never
+  surfacing even when tagged, `?q=`/occasion search, rate limiting with proof that refused requests
+  were never processed, the FAQ backlog, and RLS from anonymous/customer/admin. Re-ran Modules 5, 6,
+  9, 20, 21 and 22 scripts with no regressions.
+- **Testing note:** the assistant widget and builder option tiles render behind client-side state,
+  so they are absent from server HTML. Assert on the launcher button and on the underlying curated
+  data instead — asserting on panel copy fails for the wrong reason.
+
 ## `lib/` layering
 
 - `lib/supabase/` — the only place Supabase clients are constructed. `client.ts` for Client

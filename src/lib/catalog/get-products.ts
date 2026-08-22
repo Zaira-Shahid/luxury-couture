@@ -7,8 +7,42 @@ import type { Product, ProductImage } from "@/types/database";
 
 export type ProductWithImages = Product & { product_images: ProductImage[] };
 
+/**
+ * Storefront product search and filtering (Module 23).
+ *
+ * `q` is what makes the `SearchAction` declared in the WebSite JSON-LD
+ * (lib/seo/structured-data.ts, Module 20) actually true — that schema
+ * advertised `/products?q=` to Google before any such search existed.
+ *
+ * The same filters back the chatbot's discovery: the assistant parses a
+ * message into an intent and calls this, so customers see real rows from
+ * one code path rather than a separately-invented product list.
+ */
+export type ProductFilters = {
+  categorySlug?: string;
+  /** Free-text against name and description. */
+  q?: string;
+  occasionSlug?: string;
+  /** Exact colour/fabric names — matched against product text, since
+   *  products aren't linked to builder options in the schema. */
+  colourNames?: string[];
+  fabricNames?: string[];
+  limit?: number;
+};
+
+/** Escapes PostgREST `or()` metacharacters so a stray comma can't rewrite the filter. */
+function escapeForOr(value: string): string {
+  return value.replace(/[,()]/g, " ").trim();
+}
+
 export const getPublishedProducts = cache(
-  async (categorySlug?: string): Promise<ProductWithImages[]> => {
+  async (filtersOrCategory?: string | ProductFilters): Promise<ProductWithImages[]> => {
+    // Backwards-compatible: existing callers pass a bare category slug.
+    const filters: ProductFilters =
+      typeof filtersOrCategory === "string"
+        ? { categorySlug: filtersOrCategory }
+        : (filtersOrCategory ?? {});
+
     const supabase = await createClient();
     let query = supabase
       .from("products")
@@ -16,15 +50,54 @@ export const getPublishedProducts = cache(
       .eq("status", "published")
       .order("published_at", { ascending: false });
 
-    if (categorySlug) {
+    if (filters.categorySlug) {
       const { data: category } = await supabase
         .from("categories")
         .select("id")
-        .eq("slug", categorySlug)
+        .eq("slug", filters.categorySlug)
         .single();
       if (!category) return [];
       query = query.eq("category_id", category.id);
     }
+
+    if (filters.occasionSlug) {
+      const { data: occasion } = await supabase
+        .from("occasions")
+        .select("id")
+        .eq("slug", filters.occasionSlug)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (!occasion) return [];
+
+      const { data: links } = await supabase
+        .from("product_occasions")
+        .select("product_id")
+        .eq("occasion_id", occasion.id);
+
+      const ids = (links ?? []).map((row) => row.product_id as string);
+      // An occasion nobody has tagged yet must return nothing, not
+      // everything — an unfiltered fallback would silently show bridal
+      // pieces to someone asking for party wear.
+      if (ids.length === 0) return [];
+      query = query.in("id", ids);
+    }
+
+    // Colour and fabric are matched against product text: products carry
+    // no FK to builder options in this schema, so this is the honest
+    // best available signal rather than a join that doesn't exist.
+    const textTerms = [filters.q, ...(filters.colourNames ?? []), ...(filters.fabricNames ?? [])]
+      .map((term) => (term ? escapeForOr(term) : ""))
+      .filter(Boolean);
+
+    if (textTerms.length > 0) {
+      const clauses = textTerms.flatMap((term) => [
+        `name.ilike.%${term}%`,
+        `description.ilike.%${term}%`,
+      ]);
+      query = query.or(clauses.join(","));
+    }
+
+    if (filters.limit) query = query.limit(filters.limit);
 
     const { data, error } = await query;
     if (error) {

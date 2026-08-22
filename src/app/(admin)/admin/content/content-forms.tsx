@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { ActionResult } from "@/features/admin-content/actions";
-import type { BlogPost, Faq, Page } from "@/types/database";
+import type { BlogPost, Faq, Occasion, Page } from "@/types/database";
 
 /**
  * The three content editors. They share the submit/pending/error shape
@@ -187,6 +187,52 @@ export function FaqForm({
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       <Button type="submit" disabled={isPending} className="w-fit">
         {isPending ? "Saving…" : faq ? "Save changes" : "Create FAQ"}
+      </Button>
+    </form>
+  );
+}
+
+export function OccasionForm({
+  occasion,
+  action,
+}: {
+  occasion?: Occasion;
+  action: (formData: FormData) => Promise<ActionResult>;
+}) {
+  const { isPending, error, handleSubmit } = useFormAction(
+    action,
+    occasion ? "Occasion updated." : "Occasion created."
+  );
+
+  return (
+    <form action={handleSubmit} className="flex flex-col gap-6">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="name">Name</Label>
+          <Input id="name" name="name" defaultValue={occasion?.name} required />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="slug">Slug</Label>
+          <Input id="slug" name="slug" defaultValue={occasion?.slug} placeholder="mehndi" required />
+          <p className="text-xs text-muted-foreground">Used in /products?occasion=your-slug</p>
+        </div>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="description">Description (optional)</Label>
+        <Textarea id="description" name="description" rows={2} defaultValue={occasion?.description ?? ""} />
+      </div>
+      <div className="flex flex-col gap-1.5 sm:max-w-xs">
+        <Label htmlFor="sortOrder">Order (lower shows first)</Label>
+        <Input id="sortOrder" name="sortOrder" type="number" defaultValue={occasion?.sort_order ?? 0} />
+      </div>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" name="isActive" defaultChecked={occasion?.is_active ?? true} className="size-4" />
+        Active — shown as a filter on the shop and understood by the assistant
+      </label>
+
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      <Button type="submit" disabled={isPending} className="w-fit">
+        {isPending ? "Saving…" : occasion ? "Save changes" : "Create occasion"}
       </Button>
     </form>
   );

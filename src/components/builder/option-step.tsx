@@ -26,6 +26,7 @@ export function OptionStep({
   selectedId,
   onSelect,
   optional = true,
+  occasionLabels,
 }: {
   title: string;
   description: string;
@@ -33,6 +34,13 @@ export function OptionStep({
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   optional?: boolean;
+  /**
+   * Module 23 builder guidance: option id → the occasion names it suits,
+   * from the admin-curated `builder_option_occasions` table. Real data
+   * the owner controls, not generated prose — the guidance can never
+   * suggest something the shop does not actually offer.
+   */
+  occasionLabels?: Record<string, string[]>;
 }) {
   return (
     <div>
@@ -91,6 +99,11 @@ export function OptionStep({
               )}
               <span>{option.name}</span>
               {adjustment ? <span className="text-xs text-muted-foreground">{adjustment}</span> : null}
+              {occasionLabels?.[option.id]?.length ? (
+                <span className="text-[11px] leading-snug text-muted-foreground">
+                  Popular for {occasionLabels[option.id].join(", ")}
+                </span>
+              ) : null}
             </button>
           );
         })}

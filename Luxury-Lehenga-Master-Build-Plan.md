@@ -1475,7 +1475,30 @@ AI must never:
 
 # MODULE 23 — CUSTOMER CHATBOT & RECOMMENDATION SYSTEM
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
+
+(The customer assistant now replaces Module 9's mock chat widget as the default `CHAT_PROVIDER`,
+using the seam that module built — `CHAT_PROVIDER=mock` still reverts to the enquiry form.
+
+Central design decision: **the AI never writes the product list, it only parses the question into
+filters.** `interpretQuery` returns a fixed structured intent that drives ordinary SQL, so customers
+see real database rows as product cards. Module 22's narrow-interface guarantee therefore survives
+intact — still no general `complete()`, still no write path. The Claude implementation also
+re-validates its own output against the real catalogue before any value becomes a filter.
+
+Scope calls agreed with the owner: added a real **occasions taxonomy** (0048, admin-managed, seeded
+with bridal/mehndi/walima/reception/engagement/party and default builder-option links); implemented
+**real `?q=` search**, which fixes a defect from Module 20 where the WebSite JSON-LD advertised a
+`SearchAction` at `/products?q=` that did not exist; added **rate limiting** — the first in the
+project — because with an API key set every chat message costs money; and seeded **12 starter FAQs**
+so the assistant is demonstrable rather than answering "I don't know" to everything.
+
+The assistant records every question it could not answer and surfaces them in Admin → Content as a
+FAQ backlog — the questions customers actually ask, written by customers, ready to be turned into
+FAQs.
+
+⚠️ Claude's happy path remains **unverified** (still no `ANTHROPIC_API_KEY`); the deterministic
+engine is fully tested and is what runs by default. See `docs/AI.md`.)
 
 Implement:
 
@@ -2695,12 +2718,12 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULE 22 COMPLETE`
+`MODULE 23 COMPLETE`
 
 Current Module:
 
-`MODULE 22 — COMPLETE`
+`MODULE 23 — COMPLETE`
 
 Next Action:
 
-`Start Module 23`
+`Start Module 24`

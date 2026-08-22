@@ -42,9 +42,10 @@ product/email drafts read as genuine prose rather than filled-in templates.
 on the deterministic engine either way — ranking products by view counts is arithmetic, and paying
 a model to redo arithmetic would be slower, costlier and less accurate.
 
-**Cost.** Only two things call the API: an admin pressing a Generate button, and a customer FAQ
-question (once Module 23 ships the chatbot). Both are small requests. There is no background or
-per-page-view AI usage anywhere — nothing runs unless a person asks for it.
+**Cost.** Only two things call the API: an admin pressing a Generate button, and a customer sending
+a message to the assistant. Both are small requests, and the chat endpoint is rate limited so a
+script cannot run up a bill. There is no background or per-page-view AI usage anywhere — nothing
+runs unless a person asks for it.
 
 **To turn it off again** without deleting the key, set `AI_PROVIDER=deterministic`.
 
@@ -139,6 +140,71 @@ the banner wording — see `docs/ANALYTICS.md`.
 
 ---
 
+## The customer assistant (Module 23)
+
+The chat bubble on the storefront. It does two things and refuses to do anything else.
+
+**Answers questions** from the FAQs you wrote in Admin -> Content, and only those. Ask it something
+your FAQs don't cover and it says so, then offers the contact form. It will not guess.
+
+**Finds pieces.** "Something emerald for a mehndi" becomes a real database query. This is the part
+worth understanding: **the AI never writes the product list.** It only turns the sentence into
+filters (occasion, colour, fabric, category), and the products that come back are real rows shown
+as cards linking to real pages. It is structurally incapable of describing a piece you don't sell,
+because it never names one. Even with Claude enabled, anything it returns is re-checked against
+your actual catalogue before it becomes a filter.
+
+Everything in the safety section above still applies: it cannot state a price, a delivery timescale
+or an order status, and on a customer-facing surface a reply that trips those rules is discarded
+entirely rather than shown with redaction markers.
+
+### The FAQ backlog: the most useful thing it produces
+
+Every question it *couldn't* answer is recorded and listed in **Admin -> Content -> "Questions we
+couldn't answer"**. That list is your content to-do list, written by your actual customers. Answer
+one by adding a FAQ, and the assistant handles it from then on.
+
+### Rate limits
+
+The chat endpoint is rate limited (roughly a dozen messages per conversation per five minutes, plus
+a wider per-connection limit). This exists because with Claude enabled **every message costs money**,
+so an abusive script must not be able to run up a bill. The check happens before any AI call, so a
+flood costs nothing. A limited visitor gets a polite hold message pointing at the contact form, not
+an error. If a real customer ever hits the limit in normal use, raise the numbers in
+`src/lib/chat/rate-limit.ts`.
+
+### Turning it off
+
+`CHAT_PROVIDER=mock` reverts to the original compose-an-enquiry form from Module 9 — worth knowing
+if you ever need to switch the assistant off quickly.
+
+---
+
+## Occasions
+
+Module 23 added an **occasions** taxonomy (bridal, mehndi, walima, reception, engagement, party),
+editable in Admin -> Content. It drives three things:
+
+- the occasion filters on the shop (`/products?occasion=mehndi`)
+- the "Popular for..." hints on fabric, colour and embroidery tiles in the custom builder
+- the assistant understanding "something for a walima"
+
+Tag a **product** with occasions to have it appear in those results. The builder hints come from
+links between occasions and builder options, seeded with defaults you can change.
+
+All of it is curated data you control — the guidance is never generated text, so it can never
+suggest something you don't offer.
+
+---
+
+## Search
+
+`/products?q=` searches product names and descriptions. Worth noting: the WebSite structured data
+added in Module 20 told Google this search existed before it did. Module 23 made it real, so the
+sitelinks searchbox Google may show now actually works.
+
+---
+
 ## Known limitations
 
 - **The Claude integration has not been run against the live API.** No key was available when it was
@@ -149,9 +215,12 @@ the banner wording — see `docs/ANALYTICS.md`.
 - **Deterministic FAQ matching is word-overlap, not meaning.** "How long does delivery take" will
   not match a FAQ worded "what are your shipping times", because they share no significant words.
   Write FAQ questions the way customers actually phrase them, or turn on Claude.
-- **There is no occasion or style taxonomy** in the catalogue (no "bridal" / "mehndi" / "reception"
-  tags), so recommendations cannot yet be occasion-based. Module 23 will need either that schema
-  work or the Claude provider reasoning over product names.
+- **Occasion tagging is manual.** Module 23 added the taxonomy, but a product only appears in
+  occasion results once you tag it — a new product belongs to no occasion by default.
+- **The assistant matches words, not meaning**, on the free engine: "something sparkly" finds
+  nothing unless a real colour, fabric or occasion is named. Turning on Claude fixes this.
+- **Rate limiting is database-backed, not distributed-strict.** Adequate here; worth revisiting in
+  Module 29 (security audit).
 - Guardrails are pattern-based. They are tested against a wide set of real phrasings, but a
   sufficiently unusual wording could slip through — which is exactly why every AI output goes to a
   human for review rather than straight to a customer.

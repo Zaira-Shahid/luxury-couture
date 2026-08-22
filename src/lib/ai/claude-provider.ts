@@ -15,6 +15,8 @@ import type {
   EmailDraft,
   EmailDraftInput,
   ProductDescriptionInput,
+  QueryIntentResult,
+  QueryVocabularyInput,
 } from "./provider";
 
 /**
@@ -40,6 +42,10 @@ import type {
  * model to re-do arithmetic would be slower, costlier and less accurate.
  */
 
+/** Prompt assembly separators, named so the escape sequences live in exactly one place. */
+const LINE_BREAK = "\n";
+const PARAGRAPH_BREAK = "\n\n";
+
 const MODEL = "claude-opus-5";
 
 /**
@@ -60,6 +66,14 @@ const AnswerSchema = z.object({
     .string()
     .describe("The id of the FAQ this answer came from, or an empty string if none."),
   confident: z.boolean().describe("True only if the FAQs directly answer the question."),
+});
+
+const IntentSchema = z.object({
+  occasion_slug: z.string().describe("Exact slug from the occasions list, or empty string."),
+  colour_names: z.array(z.string()).describe("Exact names from the colours list only."),
+  fabric_names: z.array(z.string()).describe("Exact names from the fabrics list only."),
+  category_slug: z.string().describe("Exact slug from the categories list, or empty string."),
+  free_text: z.string().describe("Any remaining descriptive words, or empty string."),
 });
 
 const EmailSchema = z.object({
@@ -149,6 +163,71 @@ export class ClaudeAiProvider implements AiProvider {
     } catch (error) {
       this.logFailure("answerQuestion", error);
       return this.fallback.answerQuestion(question);
+    }
+  }
+
+  /**
+   * Classification, not generation: the model picks from the catalogue
+   * vocabulary it is given and returns a fixed shape.
+   *
+   * Every value it returns is then re-validated against the real
+   * vocabulary below, so even a model that ignores the instruction and
+   * invents "peacock blue" cannot inject a colour the shop does not
+   * sell — the filter would simply be dropped.
+   */
+  async interpretQuery(
+    query: string,
+    vocabulary: QueryVocabularyInput
+  ): Promise<QueryIntentResult> {
+    try {
+      const response = await this.client.messages.parse({
+        model: MODEL,
+        max_tokens: MAX_TOKENS,
+        thinking: { type: "adaptive" },
+        output_config: { effort: "low", format: zodOutputFormat(IntentSchema) },
+        system: [
+          "You turn a shopper's message into search filters for a lehenga shop.",
+          "Use ONLY the exact slugs and names provided. If nothing matches a field, return an empty string or empty array for it. Never invent a colour, fabric, occasion or category that is not listed.",
+        ].join(PARAGRAPH_BREAK),
+        messages: [
+          {
+            role: "user",
+            content: [
+              `Occasions: ${vocabulary.occasions.map((o) => `${o.name} (${o.slug})`).join(", ") || "none"}`,
+              `Colours: ${vocabulary.colours.map((c) => c.name).join(", ") || "none"}`,
+              `Fabrics: ${vocabulary.fabrics.map((f) => f.name).join(", ") || "none"}`,
+              `Categories: ${vocabulary.categories.map((c) => `${c.name} (${c.slug})`).join(", ") || "none"}`,
+              "",
+              `Shopper message: ${query}`,
+            ].join(LINE_BREAK),
+          },
+        ],
+      });
+
+      const parsed = response.parsed_output;
+      if (!parsed) throw new Error("unparsed intent");
+
+      // Re-validate against the real vocabulary — never trust the model
+      // to have stuck to the list.
+      const occasionSlug =
+        vocabulary.occasions.find((o) => o.slug === parsed.occasion_slug)?.slug ?? null;
+      const categorySlug =
+        vocabulary.categories.find((c) => c.slug === parsed.category_slug)?.slug ?? null;
+      const colourNames = parsed.colour_names.filter((name) =>
+        vocabulary.colours.some((c) => c.name.toLowerCase() === name.toLowerCase())
+      );
+      const fabricNames = parsed.fabric_names.filter((name) =>
+        vocabulary.fabrics.some((f) => f.name.toLowerCase() === name.toLowerCase())
+      );
+      const freeText = parsed.free_text.trim();
+
+      const isEmpty =
+        !occasionSlug && !categorySlug && colourNames.length === 0 && fabricNames.length === 0 && !freeText;
+
+      return { occasionSlug, colourNames, fabricNames, categorySlug, freeText, isEmpty };
+    } catch (error) {
+      this.logFailure("interpretQuery", error);
+      return this.fallback.interpretQuery(query, vocabulary);
     }
   }
 
