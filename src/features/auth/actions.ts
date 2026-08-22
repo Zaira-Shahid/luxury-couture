@@ -2,6 +2,8 @@
 
 import { redirect } from "next/navigation";
 
+import { sendEmail } from "@/lib/email/send";
+import { welcomeEmail } from "@/lib/email/templates";
 import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -55,6 +57,21 @@ export async function signUp(formData: FormData): Promise<ActionResult> {
     });
     if (referralError) {
       logger.warn("referral code redemption failed", { message: referralError.message, referralCode });
+    }
+  }
+
+  // Best-effort welcome email. Deliberately not awaited-and-checked into
+  // the result: an email problem must never make a successful sign-up
+  // look like a failure. Note it arrives alongside Supabase's own
+  // confirmation email — merging the two means customising Supabase's
+  // auth template, which is configuration rather than code (docs/EMAIL.md).
+  if (data.user?.email) {
+    try {
+      await sendEmail(await welcomeEmail(data.user.email, parsed.data.fullName));
+    } catch (error) {
+      logger.warn("welcome email failed", {
+        message: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

@@ -1264,6 +1264,59 @@ Operational detail is in `docs/AI.md`. The architectural points:
   so they are absent from server HTML. Assert on the launcher button and on the underlying curated
   data instead — asserting on panel copy fails for the wrong reason.
 
+## Email & Automation Templates (Module 24)
+
+Operational detail is in `docs/EMAIL.md`. The architectural points:
+
+- **Marketing and transactional are different TYPES, not a convention.** `EmailMessage`
+  (`lib/email/provider.ts`) is a discriminated union: a `marketing` message *requires*
+  `unsubscribeUrl`, a `transactional` one cannot carry the field at all. `buildMarketingEmail()`
+  takes the URL as a required argument and appends the footer itself, so "every marketing email has
+  a working unsubscribe link" is a compile-time fact rather than something to remember. Same
+  approach as Module 22's guardrails: make the rule impossible to break instead of asking nicely.
+- **Module 15's `notify()` was not rewritten.** Its `NotifyParams` shape is unchanged, so none of
+  its ~16 call sites were touched — it simply renders through `lib/email` instead of logging.
+  `lib/notifications/templates.ts` stays the single source of copy for both the in-app feed and the
+  email, which is why the two never drift.
+- **`render.ts` is import-free**, like `guardrails.ts`, `faq-matching.ts` and `query-intent.ts`, so
+  `scripts/test-email.mjs` can import the `.ts` directly under Node type stripping and test the
+  compliance rules exhaustively. Anything needing site settings lives in `layout.ts`. Keep the
+  split — the first attempt put `getEmailBrand()` alongside the renderers and the test could not
+  import it at all (`@/` aliases do not resolve outside Next).
+- **AI guardrails must NOT be applied to email templates**, and `send.ts` says so in a comment for
+  the next person. Guardrails redact every price and date — right for generated prose, wrong for an
+  order confirmation rendering the amount the customer actually paid. Guardrails guard *invented*
+  text; these templates render *stored* facts. There is a test asserting the price survives.
+- **Three Module 19 defects fixed**, all in campaign sending: marketing emails carried no
+  unsubscribe link; customer-segment targets (VIP/new/at-risk) applied **no opt-out check at all**
+  because `profiles` had no such column; and `listUsers({ perPage: 200 })` silently truncated the
+  recipient list. `getCampaignRecipients` now filters opt-outs on every target, returns a token per
+  recipient, and paginates to exhaustion. It **fails closed** — if the opt-out lookup errors it
+  sends to nobody, because emailing an opted-out person is a compliance breach and sending nothing
+  is a delay.
+- **The abandoned-cart cron was reclassified as marketing.** It is a promotional nudge, not a
+  record of something the customer did, so it now checks `marketing_opt_out` and carries an
+  unsubscribe link. The in-app notification still goes through `notify()`; only the email path
+  changed.
+- **Two opt-out schemes, deliberately.** Newsletter subscribers (0043) and customer accounts
+  (0051) are different populations. `/unsubscribe` tries both blind and reports identically either
+  way — confirming which scheme a token belongs to would leak whether an account exists. The copy
+  is phrased conditionally ("if that address was subscribed") so non-disclosure does not require
+  claiming something untrue. **A test initially asserted the opposite** and was wrong: it wanted the
+  page to admit an unknown token, which is exactly the probing oracle the design avoids.
+- **`email_deliveries` is admin-read-only with no insert policy**, written by the service-role
+  client — the same shape as the Module 23 chat tables. Recording a send failure is what makes a
+  broken provider visible instead of silent.
+- **Resend uses plain `fetch`, no SDK and no new dependency** — the request is three headers and a
+  JSON body. Marketing sends add RFC 8058 `List-Unsubscribe` headers so Gmail and Apple Mail show a
+  native unsubscribe button; transactional sends deliberately do not.
+- **Verified live** via `scripts/test-email.mjs` (42 checks, self-cleaning, non-zero exit on
+  failure) against a production build: the compliance rules first (marketing always carries an
+  opt-out, transactional never does), the price surviving guardrail-free, HTML escaping of hostile
+  content, the unsubscribe token round-trip, non-disclosure on unknown tokens, `email_deliveries`
+  recording both success and failure, and RLS from anonymous/customer/admin. Re-ran Modules 11, 12,
+  13, 14, 15, 19 and 21 scripts with no regressions.
+
 ## `lib/` layering
 
 - `lib/supabase/` — the only place Supabase clients are constructed. `client.ts` for Client
