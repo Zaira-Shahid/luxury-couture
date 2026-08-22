@@ -1,6 +1,6 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { Sparkles, Trash2 } from "lucide-react";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { generateProductDescription } from "@/features/admin-ai/actions";
 import type { ActionResult } from "@/features/admin-catalog/actions";
 import type { Category, Media } from "@/types/database";
 import type { ProductWithImages } from "@/lib/catalog/get-products";
@@ -30,12 +31,52 @@ export function ProductForm({
 }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // Controlled as of Module 22 so the AI draft can populate it. The draft
+  // only fills this field — saving is still the existing, validated
+  // create/update action the admin submits.
+  const [description, setDescription] = useState(product?.description ?? "");
+  const [isDrafting, startDrafting] = useTransition();
+  const [aiWarnings, setAiWarnings] = useState<string[]>([]);
   const [images, setImages] = useState<ImageRow[]>(
     product?.product_images
       .slice()
       .sort((a, b) => a.sort_order - b.sort_order)
       .map((img) => ({ url: img.url, altText: img.alt_text ?? "", isPrimary: img.is_primary })) ?? []
   );
+
+  function handleGenerateDescription() {
+    setError(null);
+    setAiWarnings([]);
+    const nameInput = document.getElementById("name") as HTMLInputElement | null;
+    const name = nameInput?.value.trim() ?? "";
+    if (!name) {
+      setError("Enter a product name first — the draft is written from it.");
+      return;
+    }
+    const categorySelect = document.getElementById("categoryId") as HTMLSelectElement | null;
+    const categoryName =
+      categorySelect?.selectedOptions[0]?.text && categorySelect.value
+        ? categorySelect.selectedOptions[0].text
+        : "";
+
+    startDrafting(async () => {
+      const formData = new FormData();
+      formData.set("name", name);
+      formData.set("categoryName", categoryName);
+      formData.set("existingDescription", description);
+
+      const result = await generateProductDescription(formData);
+      if ("error" in result) {
+        setError(result.error);
+        return;
+      }
+      setDescription(result.text);
+      setAiWarnings(result.warnings);
+      toast.success(
+        result.provider === "claude" ? "Description drafted." : "Description drafted (template)."
+      );
+    });
+  }
 
   function addImageRow() {
     setImages((prev) => [...prev, { url: "", altText: "", isPrimary: prev.length === 0 }]);
@@ -138,8 +179,34 @@ export function ProductForm({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="description">Description</Label>
-        <Textarea id="description" name="description" rows={4} defaultValue={product?.description ?? ""} />
+        <div className="flex items-center justify-between gap-2">
+          <Label htmlFor="description">Description</Label>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={isDrafting}
+            onClick={handleGenerateDescription}
+          >
+            <Sparkles className="size-3.5" />
+            {isDrafting ? "Writing…" : description.trim() ? "Rewrite with AI" : "Write with AI"}
+          </Button>
+        </div>
+        <Textarea
+          id="description"
+          name="description"
+          rows={6}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+        {aiWarnings.map((warning) => (
+          <p key={warning} className="text-xs text-muted-foreground">
+            {warning}
+          </p>
+        ))}
+        <p className="text-xs text-muted-foreground">
+          AI drafts never mention price or delivery times. Always read before saving.
+        </p>
       </div>
 
       <div>

@@ -672,6 +672,18 @@ export interface Faq {
   updated_at: ISODateTime;
 }
 
+/** Module 22: audit trail of AI-generated drafts an admin was offered. */
+export interface AiGeneration {
+  id: UUID;
+  kind: string;
+  provider: string;
+  prompt_summary: string | null;
+  output: string;
+  guardrail_violations: unknown;
+  actor_id: UUID | null;
+  created_at: ISODateTime;
+}
+
 export interface SeoMetadata {
   id: UUID;
   entity_type: string;

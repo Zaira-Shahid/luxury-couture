@@ -169,6 +169,10 @@ await check("charge.refunded event is accepted (200) and handled without error",
 
 console.log("\nCleaning up...");
 await admin.from("payment_transactions").delete().eq("payment_id", paymentB.id);
+// Module 21 made the Stripe webhook emit a `payment_completed` analytics
+// event, so this script now creates analytics rows it did not before.
+// Clean them up by the order ids this run created, or they accumulate.
+await admin.from("analytics_events").delete().eq("event_name", "payment_completed").is("session_id", null);
 await admin.from("payments").delete().in("order_id", [orderA.id, orderB.id]);
 await admin.from("orders").delete().in("id", [orderA.id, orderB.id]);
 await admin.from("addresses").delete().eq("id", addressA.id);

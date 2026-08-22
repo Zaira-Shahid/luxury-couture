@@ -1163,6 +1163,55 @@ Full operational detail is in `docs/ANALYTICS.md`. The architectural points:
   cron from Module 19. The rendered admin page was
   also inspected with seeded data to confirm funnel geometry and no NaN in the SVG paths.
 
+## AI Foundation (Module 22)
+
+Operational detail is in `docs/AI.md`. The architectural points:
+
+- **The interface is narrow on purpose, and that is the security design.** `AiProvider`
+  (`lib/ai/provider.ts`) exposes exactly four capabilities — answer, recommend, describe, draft —
+  and no general `complete()`. No method takes a table, an id or a status, so "AI must never alter
+  payment records / order status / bypass admin controls" is true because **no call path exists**,
+  not because a prompt asks nicely. Resist adding a general completion method in Modules 23/24;
+  that single change would dissolve the guarantee.
+- **`guardrails.ts` runs over EVERY provider's output, including the deterministic one.** A prompt
+  is a request, not a guarantee, so the enforcement is post-hoc pattern matching: all monetary
+  amounts, all delivery timescales, and all order/payment status claims are redacted. It redacts
+  *every* amount, not just wrong ones — once a figure is loose in prose there is no way to tell an
+  accurate one from an invented one, and this business runs on an admin-set Final Admin Quote.
+  Admin drafts show redacted text plus a warning (the admin is editing anyway); customer-facing
+  answers are discarded entirely via `guardedOrNull()`, because a customer must never see redaction
+  markers.
+- **Three modules are deliberately import-free** — `guardrails.ts`, `faq-matching.ts` and
+  `provider-selection.ts`. That is what lets `scripts/test-ai.mjs` import the `.ts` sources directly
+  under Node 24's type stripping and unit-test them exhaustively (73 checks, most of them
+  guardrails) instead of only observing them through a rendered page. Keep them dependency-free.
+- **The Claude provider falls back to the deterministic one on every failure path** — API error,
+  refusal, timeout, or a response that fails schema validation — so an AI outage degrades quality
+  and never availability. `selectProvider()` mirrors `isStripeConfigured()`: no key means the free
+  engine, and the whole app works that way.
+- **Recommendations never touch a model.** Ranking by co-view/co-purchase counts is arithmetic;
+  paying a model to redo it would be slower, costlier and less accurate. `ClaudeAiProvider`
+  delegates `recommendProducts` straight to the deterministic implementation.
+- **Affinity is product→product, never per-visitor.** `recommendations.ts` asks "which products
+  appeared in the same session as this one", never "what has this person viewed". That keeps it
+  inside the purpose disclosed in the Module 21 consent banner; per-person profiling from
+  analytics-consented data would exceed it and need its own consent category.
+- **`getRelatedProducts()` now delegates to the engine** and preserves its ranking — `.in()` returns
+  rows in arbitrary order, so the result is re-sorted back into the engine's order. Two behaviour
+  changes: a product with no category now gets recommendations (previously none), and every tier
+  re-filters on `status = 'published'`, so a draft with historical affinity data can never resurface.
+- **`ai_generations` is admin-only for insert as well as select**, unlike `analytics_events`
+  (insert-by-anyone, so anonymous visitors can be measured). Nothing here is written by a visitor —
+  generation is an admin action — so there is no reason to open the insert side.
+- **Cleanup gap found and fixed in a prior module's test:** Module 21 made the Stripe webhook emit
+  `payment_completed`, which meant `scripts/test-payments.mjs` (written earlier) started leaving
+  `analytics_events` rows behind. Its teardown now clears them. Worth remembering as a pattern —
+  instrumenting an existing flow can silently break an older script's cleanup.
+- **The Claude happy path is UNVERIFIED.** No `ANTHROPIC_API_KEY` was available; request shapes
+  follow the current SDK docs (`messages.parse` + `zodOutputFormat`, model `claude-opus-5`, adaptive
+  thinking, low effort) and the fallback paths are tested, but no successful live response has been
+  observed. Same deferral Modules 11/14 made for PayPal and couriers.
+
 ## `lib/` layering
 
 - `lib/supabase/` — the only place Supabase clients are constructed. `client.ts` for Client

@@ -1419,7 +1419,33 @@ All tracking must respect privacy/consent requirements.
 
 # MODULE 22 — AI FOUNDATION
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
+
+(Provider abstraction in `lib/ai/` following the `lib/payments` shape: a real Claude provider
+(`@anthropic-ai/sdk`, `claude-opus-5`) alongside a deterministic engine that is the DEFAULT and runs
+with zero configuration. No key means the free engine, and the whole app works that way — the same
+`isStripeConfigured()` pattern from Module 11. Every Claude method falls back to the deterministic
+one on error, refusal or timeout, so an AI outage degrades quality and never availability.
+
+The five hard rules are enforced two ways, and the split is the design. "Never alter payment
+records / order status / bypass admin controls" is STRUCTURAL: the `AiProvider` interface exposes
+four narrow capabilities and no general `complete()`, so no call path to a write exists. "Never
+invent prices / promise delivery dates" is enforced by `guardrails.ts`, which runs over EVERY
+provider's output — including the deterministic one — redacting all monetary amounts, all delivery
+timescales and all order/payment status claims. Both admin surfaces are draft-and-review: AI fills
+a form field, the admin edits and saves through the existing validated action.
+
+Scope call agreed with the owner: this module ships the engine plus the two ADMIN surfaces no later
+module owns (Generate product description, Draft customer email). The customer chatbot and
+storefront recommendation UI stay with Module 23; the email template library stays with Module 24.
+
+Recommendations are rules-based and never call a model — ranking by co-view/co-purchase counts is
+arithmetic. Affinity is computed product-to-product, never per-visitor, keeping it inside the
+purpose disclosed in Module 21's consent banner.
+
+⚠️ **The Claude happy path is UNVERIFIED** — no `ANTHROPIC_API_KEY` was available. Request shapes
+follow current SDK docs and all fallback paths are tested, but no successful live response has been
+observed. Test with a real key before relying on it. See `docs/AI.md`.)
 
 Create provider-independent AI architecture.
 
@@ -2669,12 +2695,12 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULE 21 COMPLETE`
+`MODULE 22 COMPLETE`
 
 Current Module:
 
-`MODULE 21 — COMPLETE`
+`MODULE 22 — COMPLETE`
 
 Next Action:
 
-`Start Module 22`
+`Start Module 23`
