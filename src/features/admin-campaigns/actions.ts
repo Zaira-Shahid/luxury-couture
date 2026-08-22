@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 
 import { getCampaignRecipients } from "@/lib/admin/get-campaign-recipients";
 import { logger } from "@/lib/logger";
-import { sendMockEmail } from "@/lib/notifications/mock-channels";
+import { campaignEmail } from "@/lib/email/templates";
+import { sendEmail } from "@/lib/email/send";
 import { createClient } from "@/lib/supabase/server";
 import { campaignSchema } from "@/lib/validations/marketing";
 
@@ -51,10 +52,12 @@ export async function deleteCampaign(id: string): Promise<ActionResult> {
 }
 
 /**
- * Sends via the mock email channel directly, not notify() — a marketing
- * campaign is deliberately kept out of the transactional in-app
- * notification feed (order/payment/shipping updates), a separate concern
- * even though both ultimately log through the same mock provider.
+ * Sends through the MARKETING email path, not notify(). Two reasons:
+ * a campaign is deliberately kept out of the transactional in-app
+ * notification feed (order/payment/shipping updates), and — as of
+ * Module 24 — a marketing email requires an unsubscribe URL that
+ * notify() has no way to supply. The marketing template takes that URL
+ * as a required argument, so a campaign cannot be sent without one.
  */
 export async function sendCampaign(id: string): Promise<ActionResult> {
   const supabase = await createClient();
@@ -63,13 +66,23 @@ export async function sendCampaign(id: string): Promise<ActionResult> {
   if (campaign.status === "sent") return { error: "This campaign has already been sent." };
 
   const recipients = await getCampaignRecipients(campaign.target);
+  // Recipients are already filtered for opt-outs on every target (0051),
+  // and each carries its own unsubscribe token.
+  let sent = 0;
   for (const recipient of recipients) {
-    sendMockEmail(recipient.email, campaign.subject, campaign.body);
+    const message = await campaignEmail(
+      recipient.email,
+      campaign.subject,
+      campaign.body,
+      recipient.unsubscribeUrl
+    );
+    const result = await sendEmail(message);
+    if (result.ok) sent += 1;
   }
 
   const { error } = await supabase
     .from("campaigns")
-    .update({ status: "sent", sent_at: new Date().toISOString(), recipient_count: recipients.length })
+    .update({ status: "sent", sent_at: new Date().toISOString(), recipient_count: sent })
     .eq("id", id);
   if (error) {
     logger.error("campaign send status update failed", error, { id });

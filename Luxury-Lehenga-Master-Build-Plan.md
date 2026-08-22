@@ -1518,7 +1518,36 @@ AI responses must be clearly constrained by business data.
 
 # MODULE 24 — EMAIL & AUTOMATION TEMPLATES
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
+
+(Module 15 had already written 16 template bodies and the notify() dispatcher, so the real gap was
+everything around them: no provider abstraction (email was a `logger.info` call), no HTML, no
+welcome email, and no record of what was sent.
+
+All 12 required template kinds now render branded HTML plus a plain-text alternative through one
+shared layout, using the logo and brand name from site settings. `notify()` was NOT rewritten — its
+shape is unchanged, so none of its ~16 call sites were touched; it simply renders through
+`lib/email` now, and `lib/notifications/templates.ts` remains the single source of copy for both the
+in-app feed and the email.
+
+Provider: mock by default (logs, costs nothing, works offline), with a real Resend implementation
+using plain `fetch` — no SDK, no new dependency — that activates only when RESEND_API_KEY and
+EMAIL_FROM are both set. Every send is recorded in `email_deliveries` (admin-only), so a failure is
+a row rather than a log line that scrolled away.
+
+**Marketing and transactional are different TYPES, not a convention.** A marketing message requires
+an unsubscribe URL to be constructed at all, and the marketing layout injects the link itself — so a
+future campaign feature cannot omit it. Transactional email deliberately carries none: opting out of
+marketing is not opting out of knowing where your order is.
+
+⚠️ **Three compliance defects in Module 19 found and fixed here:** campaign emails carried NO
+unsubscribe link; customer-segment campaigns (VIP/new/at-risk) applied NO opt-out check at all,
+because `profiles` had no such column; and the recipient lookup silently stopped at 200 users. UK
+PECR requires a working opt-out on every marketing email. Customers now have the same opt-out
+mechanism subscribers already had, honoured on every target, with the lookup failing closed.
+
+Claude's and Resend's live paths both remain unverified (no credentials available); the mock path is
+fully tested and is what runs by default. See `docs/EMAIL.md`.)
 
 Create reusable templates for:
 
@@ -2718,12 +2747,12 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULE 23 COMPLETE`
+`MODULE 24 COMPLETE`
 
 Current Module:
 
-`MODULE 23 — COMPLETE`
+`MODULE 24 — COMPLETE`
 
 Next Action:
 
-`Start Module 24`
+`Start Module 25`

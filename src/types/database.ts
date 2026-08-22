@@ -20,6 +20,10 @@ export interface Profile {
   full_name: string | null;
   phone: string | null;
   avatar_url: string | null;
+  /** Module 24: marketing suppression. Transactional email ignores this. */
+  marketing_opt_out: boolean;
+  /** Token for a one-click unsubscribe link that works without signing in. */
+  marketing_unsubscribe_token: UUID;
   created_at: ISODateTime;
   updated_at: ISODateTime;
 }
@@ -670,6 +674,21 @@ export interface Faq {
   is_active: boolean;
   created_at: ISODateTime;
   updated_at: ISODateTime;
+}
+
+export type EmailDeliveryStatus = "sent" | "failed";
+
+/** Module 24: a record of every email the system sent, admin-readable. */
+export interface EmailDelivery {
+  id: UUID;
+  to_email: string;
+  template_key: string;
+  subject: string;
+  provider: string;
+  status: EmailDeliveryStatus;
+  error: string | null;
+  is_marketing: boolean;
+  created_at: ISODateTime;
 }
 
 /** Module 23: what a piece is FOR — the taxonomy driving occasion discovery. */

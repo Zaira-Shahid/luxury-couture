@@ -1,8 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { buildTransactionalEmail, getEmailBrand } from "@/lib/email/layout";
+import { sendEmail } from "@/lib/email/send";
 import { logger } from "@/lib/logger";
 
-import { sendMockEmail, sendMockWhatsApp } from "./mock-channels";
+import { sendMockWhatsApp } from "./mock-channels";
 
 export type NotifyParams = {
   /** Signed-in recipient — omit for a guest (no account, no in-app inbox). */
@@ -23,9 +25,23 @@ export type NotifyParams = {
  * goes through this function at all since triggers can't call app code).
  *
  * The in-app row is only inserted when profileId is present — a guest
- * enquiry has no account to attach one to. Mock email/WhatsApp still
- * fire independently whenever that contact info is available, so a
- * guest still gets a (mocked) confirmation.
+ * enquiry has no account to attach one to. Email still fires
+ * independently whenever an address is available, so a guest still gets
+ * a confirmation.
+ *
+ * MODULE 24: email now goes through lib/email (branded HTML + plain
+ * text, real provider when configured, recorded in email_deliveries)
+ * instead of a bare log line. The NotifyParams shape is unchanged on
+ * purpose, so none of this function's ~16 call sites needed touching —
+ * they keep passing the same {type, title, body} from
+ * lib/notifications/templates.ts, which stays the single source of copy
+ * for both the in-app feed and the email.
+ *
+ * Everything sent from here is TRANSACTIONAL: order, payment, shipping
+ * and enquiry updates. Marketing (campaigns, abandoned-cart recovery)
+ * deliberately does not route through notify() — it needs an unsubscribe
+ * link, which the marketing template requires and this path has no way
+ * to supply.
  */
 export async function notify(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -48,7 +64,30 @@ export async function notify(
     }
   }
 
-  if (email) sendMockEmail(email, title, body);
+  if (email) {
+    try {
+      const brand = await getEmailBrand();
+      const rendered = buildTransactionalEmail(brand, {
+        heading: title,
+        paragraphs: [body],
+      });
+      await sendEmail({
+        kind: "transactional",
+        to: email,
+        subject: title,
+        templateKey: type,
+        ...rendered,
+      });
+    } catch (error) {
+      // Never let an email problem affect the operation that triggered
+      // it — the order is still placed, the payment still recorded.
+      logger.warn("notify: email failed", {
+        message: error instanceof Error ? error.message : String(error),
+        type,
+      });
+    }
+  }
+
   if (phone) sendMockWhatsApp(phone, body);
 
   return { inAppSuccess };
