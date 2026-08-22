@@ -1,24 +1,13 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, Geist } from "next/font/google";
 import { Toaster } from "sonner";
 
 import { siteConfig } from "@/lib/config/site";
 import { absoluteUrl } from "@/lib/seo/urls";
+import { fontClassesFor } from "@/lib/settings/fonts";
 import { getSiteSettings } from "@/lib/settings/get-site-settings";
 import { cn } from "@/lib/utils";
 
 import "./globals.css";
-
-const fontSans = Geist({
-  subsets: ["latin"],
-  variable: "--font-sans",
-});
-
-const fontHeading = Cormorant_Garamond({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-heading",
-});
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await getSiteSettings();
@@ -67,17 +56,28 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const settings = await getSiteSettings();
-  // Runtime brand-color overrides (Module 3/25 admin-configurable) on top
-  // of globals.css's developer defaults — only set the CSS vars that have
-  // an actual admin value, so unset ones keep falling through to :root.
+
+  // Runtime theme overrides (Module 3, extended in Module 25) layered on
+  // top of globals.css's developer defaults. Only variables with an
+  // actual admin value are emitted, so an unset one keeps falling through
+  // to :root rather than being defined as an empty string — which would
+  // override the default with nothing and render an invisible element.
   const themeStyle: Record<string, string> = {};
-  if (settings.theme.primary) themeStyle["--primary"] = settings.theme.primary;
-  if (settings.theme.accent) themeStyle["--accent"] = settings.theme.accent;
+  const themeVars: [string, string | null][] = [
+    ["--primary", settings.theme.primary],
+    ["--accent", settings.theme.accent],
+    ["--background", settings.theme.background],
+    ["--foreground", settings.theme.foreground],
+    ["--radius", settings.theme.radius],
+  ];
+  for (const [name, value] of themeVars) {
+    if (value) themeStyle[name] = value;
+  }
 
   return (
     <html
       lang="en"
-      className={cn(fontSans.variable, fontHeading.variable)}
+      className={cn(fontClassesFor(settings.theme.fontPreset))}
       style={themeStyle as React.CSSProperties}
     >
       <body className="antialiased">

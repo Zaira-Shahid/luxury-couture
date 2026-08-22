@@ -1,3 +1,5 @@
+import type { FontPreset } from "./registry";
+
 export type SocialLinks = {
   instagram?: string;
   facebook?: string;
@@ -11,17 +13,38 @@ export type SocialLinks = {
  * e.g. "theme.primary") over these defaults, so every field is always
  * defined even when the table has zero rows — today's real state.
  *
+ * This type stays hand-written even though Module 25 added a declarative
+ * registry (`registry.ts`), because a type derived from a runtime array
+ * loses the per-field nullability that call sites depend on. The registry
+ * drives *parsing and the admin form*; this drives *reading*. A test
+ * asserts every registry path exists here, so the two cannot drift
+ * silently.
+ *
  * `store.announcementEnabled`/`announcementText` (Module 3's single
  * global on/off banner) were removed here — Module 19 Pass 2 replaced
  * that mechanism with `promotional_banners` (multiple, scheduled,
  * admin-managed). Any leftover `store.announcement_*` rows in
- * `site_settings` are harmlessly ignored by `applyRow`'s default case.
+ * `site_settings` are harmlessly ignored.
  */
 export type SiteSettings = {
+  general: {
+    /** ISO 4217 code. Applies to display and to NEW orders only. */
+    currency: string;
+    /** BCP 47 tag used for number and date formatting. */
+    locale: string;
+    country: string | null;
+    timezone: string | null;
+  };
   theme: {
-    /** oklch(...) string, or null to use the CSS default. */
+    /** oklch(...) or any CSS colour, or null to use the CSS default. */
     primary: string | null;
     accent: string | null;
+    background: string | null;
+    foreground: string | null;
+    /** A CSS length, e.g. "0.625rem". */
+    radius: string | null;
+    /** One of FONT_PRESETS — fonts are build-time, so this is a choice, not a font name. */
+    fontPreset: FontPreset;
   };
   branding: {
     logoUrl: string | null;
@@ -44,11 +67,24 @@ export type SiteSettings = {
     googleSiteVerification: string | null;
     /**
      * Master switch for search indexing. Defaults to false so a
-     * pre-launch/staging deploy is never indexed by accident — the owner
-     * turns it on in Admin → SEO when the site goes live. Drives both
-     * `robots.txt` and every page's robots meta tag.
+     * pre-launch/staging deploy is never indexed by accident.
      */
     indexingEnabled: boolean;
+  };
+  /**
+   * Public tracking identifiers — NOT secrets. Moved out of
+   * NEXT_PUBLIC_* env vars in Module 25 so they can be changed without a
+   * redeploy. The env vars remain as a fallback for existing deploys.
+   */
+  analytics: {
+    gaMeasurementId: string | null;
+    metaPixelId: string | null;
+    tiktokPixelId: string | null;
+  };
+  /** Feature toggles only. API keys stay in the environment. */
+  ai: {
+    assistantEnabled: boolean;
+    adminDraftingEnabled: boolean;
   };
   homepage: {
     seoTitle: string | null;
@@ -60,7 +96,20 @@ export type SiteSettings = {
 };
 
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
-  theme: { primary: null, accent: null },
+  general: {
+    currency: "GBP",
+    locale: "en-GB",
+    country: null,
+    timezone: null,
+  },
+  theme: {
+    primary: null,
+    accent: null,
+    background: null,
+    foreground: null,
+    radius: null,
+    fontPreset: "cormorant-geist",
+  },
   branding: { logoUrl: null, faviconUrl: null },
   store: {
     socialLinks: {},
@@ -76,6 +125,17 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
     twitterHandle: null,
     googleSiteVerification: null,
     indexingEnabled: false,
+  },
+  analytics: {
+    gaMeasurementId: null,
+    metaPixelId: null,
+    tiktokPixelId: null,
+  },
+  ai: {
+    // Both default ON: the deterministic engine is free and works with no
+    // configuration, so there is nothing to protect against by default.
+    assistantEnabled: true,
+    adminDraftingEnabled: true,
   },
   homepage: {
     seoTitle: null,

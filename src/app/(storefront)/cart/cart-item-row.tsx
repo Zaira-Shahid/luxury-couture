@@ -8,11 +8,23 @@ import { Button } from "@/components/ui/button";
 import { removeCartItem, updateCartItemQuantity } from "@/features/cart/actions";
 import type { EnrichedCartItem } from "@/lib/cart/get-cart";
 
-function formatPrice(amount: number, currency: string) {
-  return new Intl.NumberFormat("en-GB", { style: "currency", currency }).format(amount);
-}
+import { formatMoney } from "@/lib/settings/format";
 
-export function CartItemRow({ item }: { item: EnrichedCartItem }) {
+export function CartItemRow({
+  item,
+  currency,
+  locale,
+}: {
+  item: EnrichedCartItem;
+  /**
+   * Passed down from the page rather than read from the product row:
+   * the cart TOTAL is rendered in the shop's configured currency
+   * (Module 25), so the line items must match it. Showing a line in one
+   * currency and the total in another is worse than either alone.
+   */
+  currency: string;
+  locale: string;
+}) {
   const [isPending, startTransition] = useTransition();
 
   function handleQuantityChange(quantity: number) {
@@ -32,7 +44,6 @@ export function CartItemRow({ item }: { item: EnrichedCartItem }) {
 
   const name = item.product?.name ?? item.builderConfigLabel ?? "Item";
   const href = item.product ? `/products/${item.product.slug}` : null;
-  const currency = item.product?.currency ?? "GBP";
 
   return (
     <div className="flex items-center gap-4 border-b border-border py-4 last:border-0">
@@ -52,7 +63,7 @@ export function CartItemRow({ item }: { item: EnrichedCartItem }) {
         ) : (
           <p className="text-sm font-medium">{name}</p>
         )}
-        <p className="text-sm text-muted-foreground">{formatPrice(item.unit_price_snapshot, currency)}</p>
+        <p className="text-sm text-muted-foreground">{formatMoney(item.unit_price_snapshot, currency, locale)}</p>
         <div className="mt-2 flex items-center gap-2">
           <Button
             type="button"
@@ -79,7 +90,7 @@ export function CartItemRow({ item }: { item: EnrichedCartItem }) {
         </div>
       </div>
       <p className="text-sm font-medium">
-        {formatPrice(item.unit_price_snapshot * item.quantity, currency)}
+        {formatMoney(item.unit_price_snapshot * item.quantity, currency, locale)}
       </p>
     </div>
   );

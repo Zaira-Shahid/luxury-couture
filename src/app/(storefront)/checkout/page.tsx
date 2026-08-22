@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { getMoneyFormatter } from "@/lib/settings/get-money-formatter";
+
 
 import { EventTracker } from "@/components/analytics/event-tracker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,11 +15,9 @@ import { CheckoutForm } from "./checkout-form";
 
 export const metadata: Metadata = { title: "Checkout" };
 
-function formatPrice(amount: number) {
-  return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(amount);
-}
-
 export default async function CheckoutPage() {
+  // Module 25: currency and locale come from Admin -> Settings.
+  const { format: formatPrice } = await getMoneyFormatter();
   // Orders require an account (orders.customer_id is not-null by design,
   // per Module 1's own "all writes happen server-side once validated"
   // intent) — checkout can't proceed as a guest, unlike the cart itself.
