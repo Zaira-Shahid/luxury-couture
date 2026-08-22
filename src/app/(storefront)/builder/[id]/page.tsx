@@ -6,9 +6,24 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { getAuthUser } from "@/lib/auth/session";
 import { getBuilderConfiguration, getInspirationImages } from "@/lib/builder/get-configuration";
 import { getBuilderOptionSets } from "@/lib/builder/get-options";
+import { getOptionOccasionLabels } from "@/lib/catalog/get-occasions";
 import { getPublishedProducts } from "@/lib/catalog/get-products";
 
 export const metadata: Metadata = { title: "Custom Builder" };
+
+/**
+ * Module 23 builder guidance. Loaded server-side so the option tiles can
+ * show which occasions each fabric/colour/embroidery suits — curated by
+ * the admin in `builder_option_occasions`, never generated text.
+ */
+async function loadOccasionLabels() {
+  const [fabrics, colours, embroidery_types] = await Promise.all([
+    getOptionOccasionLabels("fabrics"),
+    getOptionOccasionLabels("colours"),
+    getOptionOccasionLabels("embroidery_types"),
+  ]);
+  return { fabrics, colours, embroidery_types };
+}
 
 export default async function BuilderContinuePage({
   params,
@@ -29,15 +44,17 @@ export default async function BuilderContinuePage({
     return <InvalidLink />;
   }
 
-  const [options, products, images, user] = await Promise.all([
+  const [options, products, images, user, occasionLabels] = await Promise.all([
     getBuilderOptionSets(),
     getPublishedProducts(),
     getInspirationImages(id, token),
     getAuthUser(),
+    loadOccasionLabels(),
   ]);
 
   return (
     <BuilderShell
+      occasionLabels={occasionLabels}
       initialConfig={config}
       initialImages={images}
       options={options}

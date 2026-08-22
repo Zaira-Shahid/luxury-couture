@@ -3,8 +3,14 @@ import Link from "next/link";
 
 import { DeleteButton } from "@/components/admin/delete-button";
 import { Button } from "@/components/ui/button";
-import { deleteBlogPost, deleteFaq, deletePage } from "@/features/admin-content/actions";
-import { getAdminBlogPosts, getAdminFaqs, getAdminPages } from "@/lib/admin/get-content";
+import { deleteBlogPost, deleteFaq, deleteOccasion, deletePage } from "@/features/admin-content/actions";
+import {
+  getAdminBlogPosts,
+  getAdminFaqs,
+  getAdminOccasions,
+  getAdminPages,
+  getUnansweredQuestions,
+} from "@/lib/admin/get-content";
 
 export const metadata: Metadata = { title: "Content" };
 
@@ -17,10 +23,12 @@ function StatusBadge({ published }: { published: boolean }) {
 }
 
 export default async function AdminContentPage() {
-  const [posts, pages, faqs] = await Promise.all([
+  const [posts, pages, faqs, occasions, unanswered] = await Promise.all([
     getAdminBlogPosts(),
     getAdminPages(),
     getAdminFaqs(),
+    getAdminOccasions(),
+    getUnansweredQuestions(),
   ]);
 
   return (
@@ -165,6 +173,95 @@ export default async function AdminContentPage() {
                         action={deleteFaq.bind(null, faq.id)}
                         confirmMessage="Delete this FAQ?"
                       />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="font-heading text-xl">Occasions</h2>
+          <Button render={<Link href="/admin/content/occasions/new" />}>New Occasion</Button>
+        </div>
+        <p className="mb-4 text-sm text-muted-foreground">
+          What a piece is for. Drives the occasion filters on the shop, the &ldquo;popular for&rdquo;
+          hints in the custom builder, and lets the assistant understand &ldquo;something for a
+          mehndi&rdquo;.
+        </p>
+        {occasions.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No occasions yet.</p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-border">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 text-left text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-2 font-medium">Name</th>
+                  <th className="px-4 py-2 font-medium">Filter URL</th>
+                  <th className="px-4 py-2 font-medium">Active</th>
+                  <th className="px-4 py-2 font-medium">Order</th>
+                  <th className="px-4 py-2 font-medium"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {occasions.map((occasion) => (
+                  <tr key={occasion.id} className="border-t border-border">
+                    <td className="px-4 py-2">
+                      <Link
+                        href={`/admin/content/occasions/${occasion.id}/edit`}
+                        className="hover:underline"
+                      >
+                        {occasion.name}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-2 text-muted-foreground">
+                      /products?occasion={occasion.slug}
+                    </td>
+                    <td className="px-4 py-2">{occasion.is_active ? "Yes" : "—"}</td>
+                    <td className="px-4 py-2">{occasion.sort_order}</td>
+                    <td className="px-4 py-2 text-right">
+                      <DeleteButton
+                        action={deleteOccasion.bind(null, occasion.id)}
+                        confirmMessage="Delete this occasion?"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section>
+        <h2 className="mb-1 font-heading text-xl">Questions we couldn&apos;t answer</h2>
+        <p className="mb-4 text-sm text-muted-foreground">
+          Real questions customers asked the assistant that your FAQs don&apos;t cover. Each one is
+          a FAQ worth writing — add it above and the assistant will answer it from then on.
+        </p>
+        {unanswered.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Nothing here — either no one has asked something unanswerable yet, or your FAQs are
+            covering what people ask.
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-border">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 text-left text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-2 font-medium">Question asked</th>
+                  <th className="px-4 py-2 font-medium">When</th>
+                </tr>
+              </thead>
+              <tbody>
+                {unanswered.map((question) => (
+                  <tr key={question.id} className="border-t border-border">
+                    <td className="px-4 py-2">{question.content}</td>
+                    <td className="px-4 py-2 whitespace-nowrap text-muted-foreground">
+                      {new Date(question.created_at).toLocaleDateString("en-GB")}
                     </td>
                   </tr>
                 ))}
