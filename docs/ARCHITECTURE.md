@@ -1317,6 +1317,63 @@ Operational detail is in `docs/EMAIL.md`. The architectural points:
   recording both success and failure, and RLS from anonymous/customer/admin. Re-ran Modules 11, 12,
   13, 14, 15, 19 and 21 scripts with no regressions.
 
+## Admin Settings & Business Configuration (Module 25)
+
+Operational detail is in `docs/SETTINGS.md`. The architectural points:
+
+- **A declarative registry replaced a hand-written switch.** Adding a setting used to mean four
+  edits that could drift apart - a field on `SiteSettings`, a default, a `case` in `applyRow`, and
+  a form input. `lib/settings/registry.ts` is now the single description; `applyRow`, the admin
+  form and validation all derive from it. `SiteSettings` stays hand-written because a type derived
+  from a runtime array loses per-field nullability that call sites depend on; the registry drives
+  *parsing and the form*, the type drives *reading*, and the settings page rendering every section
+  is the check that they agree.
+- **Secrets are structurally excluded.** `ENV_CREDENTIALS` lists credentials by env-var NAME so the
+  screen can report configured/not-set without ever reading a value. `scripts/test-settings-pass1.mjs`
+  asserts no credential-shaped key exists in the registry and that no env value - including
+  `SUPABASE_SERVICE_ROLE_KEY` - ever appears in the page HTML. Adding a key to the registry instead
+  of `ENV_CREDENTIALS` is the mistake this guards against.
+- **The save action validates against the registry**, writing only keys belonging to the posted
+  section. A crafted form post cannot set an arbitrary `site_settings` key - which matters because
+  the table also holds operational switches like `seo.indexing_enabled`.
+- **Empty means "use the default", so the row is deleted** rather than stored as `""` - otherwise
+  `getSiteSettings()` returns an empty string where call sites expect null and fall back. Booleans
+  are the exception and are always written, because an unchecked checkbox submits nothing at all.
+- **Three import-free modules**, for two different reasons: `registry.ts` and `pricing.ts` so tests
+  import the `.ts` directly under Node type stripping; `format.ts` because the cart ROW is a client
+  component, and importing `getSiteSettings` there drags `next/headers` into the client bundle and
+  fails the build (hit during Pass 1 - the settings-reading half is `get-money-formatter.ts`).
+  Same split as `lib/email/render.ts` vs `layout.ts`.
+- **Money rules default to OFF and are pure functions.** `calculateTax`/`calculateDeposit` return
+  their input unchanged at 0%, so upgrading changes no totals until an admin opts in - silently
+  charging tax or splitting a payment would be unacceptable. Both round to whole pence, and the
+  deposit computes the balance by *subtraction* so the two always sum to the total exactly rather
+  than losing a penny to independent rounding.
+- **Correction found while implementing:** `orders.deposit_amount` already existed (0007) and the
+  quotation-acceptance flow already created `deposit` payments. Only the CART CHECKOUT path lacked
+  a deposit rule, and `updateOrderAfterPayment` already recomputed balances from succeeded
+  payments - so Pass 2 needed one new column (`tax_amount`) rather than the two assumed at
+  planning time, and `placeOrder` simply mirrors what the quotation flow already did.
+- **Toggles are enforced server-side, not by hiding UI.** `ai.admin_drafting_enabled` is checked
+  inside the Server Action, because actions are independently addressable POST endpoints and a
+  hidden button is only a convenience. `ai.assistant_enabled` is checked in `ChatWidget` so a
+  disabled assistant ships no markup and no client JS.
+- **Analytics IDs must arrive as props.** `NEXT_PUBLIC_*` is inlined at BUILD time, so a client
+  component reading `process.env` could never see a value an admin changed at runtime. The
+  storefront layout resolves settings-then-env and passes them down.
+- **Fixed while testing:** the cart total used the configured currency while the line rows still
+  used hardcoded GBP - one page showing two currencies. Rows now take currency and locale from the
+  page.
+- **Verified live** via `scripts/test-settings-pass1.mjs` (60 checks) and `pass2.mjs` (48 checks),
+  both self-cleaning - they snapshot `site_settings`, restore every row they touch, and FAIL if the
+  table is not left exactly as found. Re-ran Modules 3, 4, 10, 11, 12, 15, 19, 21-24 with no
+  regressions.
+- **Three testing traps hit in this module, all worth remembering:** `/cart` and `/checkout` show
+  no prices without a real seeded cart, so currency assertions pass vacuously on an empty one;
+  React's `<!-- -->` interpolation markers break substring assertions on interpolated copy (strip
+  them first); and "Page not found" appears in EVERY page's App Router payload, so it can never
+  distinguish a 404 from a real page - assert on page-specific content instead.
+
 ## `lib/` layering
 
 - `lib/supabase/` — the only place Supabase clients are constructed. `client.ts` for Client

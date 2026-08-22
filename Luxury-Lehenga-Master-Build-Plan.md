@@ -1570,7 +1570,34 @@ Create provider abstraction.
 
 # MODULE 25 — ADMIN SETTINGS & BUSINESS CONFIGURATION
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
+
+(Delivered in two passes. All ten sections ship: General, Theme, Store, Orders, Builder, Shipping,
+Notifications, SEO, Analytics and AI, driven by a declarative registry so adding a setting is one
+entry rather than four edits that can drift apart.
+
+TWO RULES ENFORCED THROUGHOUT. Secrets never enter the database - Stripe, Claude, Resend and the
+cron secret stay in environment variables and the screen reports only configured/not-set, never a
+value; a credential in a row every admin can read would be a real security regression. And every
+field ships wired to visible behaviour: a setting that stores a value but does nothing is worse
+than no setting, which is why shipping rate tables were deferred rather than added as inert inputs.
+
+New business logic, both defaulting to OFF so upgrading changes nothing: a configurable tax rate
+(inclusive or exclusive) applied after discounts and disclosed on the checkout summary, and a
+deposit percentage for cart checkout that creates a deposit payment with the balance due before
+shipping. Correction to the plan's assumption: orders.deposit_amount already existed and the
+quotation flow already created deposit payments - only the cart path lacked a rule, so this needed
+one new column rather than two.
+
+Also wired: currency and locale replacing hardcoded GBP/en-GB across the storefront, theme CSS
+variables extended to background/text/radius, typography as preloaded font presets (fonts resolve
+at build time, so a free-text font name would silently do nothing), analytics tracking IDs moved
+out of build-time env vars, and feature toggles for the assistant, admin drafting, the builder and
+both email streams - each enforced server-side rather than by hiding UI.
+
+WARNING: Shipping rate tables (zones, weights, per-country rates) are NOT built and the screen says
+so. Tax is a single flat rate, not per-product VAT classes. Order/production statuses stay
+code-owned. See docs/SETTINGS.md.)
 
 Admin Settings must become the control center.
 
@@ -2747,12 +2774,12 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULE 24 COMPLETE`
+`MODULE 25 COMPLETE`
 
 Current Module:
 
-`MODULE 24 — COMPLETE`
+`MODULE 25 — COMPLETE`
 
 Next Action:
 
-`Start Module 25`
+`Start Module 26`

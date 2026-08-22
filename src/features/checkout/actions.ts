@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 
 import { getCart } from "@/lib/cart/get-cart";
 import { trackServer } from "@/lib/analytics/track-server";
+import { calculateDeposit, calculateTax } from "@/lib/settings/pricing";
+import { getSiteSettings } from "@/lib/settings/get-site-settings";
 import { logger } from "@/lib/logger";
 import { poundsToPoints, pointsToPounds } from "@/lib/loyalty/config";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -164,7 +166,15 @@ export async function placeOrder(formData: FormData): Promise<ActionResult> {
     }
   }
 
-  const totalAmount = Number(Math.max(0, subtotal - discountAmount).toFixed(2));
+  // Module 25: tax and deposit rules from Admin -> Settings. Both default
+  // to 0, and calculateTax/calculateDeposit return the input unchanged at
+  // 0 — so an existing shop's totals and payment records are byte-for-byte
+  // identical until an admin opts in.
+  const settings = await getSiteSettings();
+  const taxableAmount = Math.max(0, subtotal - discountAmount);
+  const tax = calculateTax(taxableAmount, settings.store.taxRate, settings.store.taxInclusive);
+  const totalAmount = tax.total;
+  const deposit = calculateDeposit(totalAmount, settings.orders.depositPercent);
 
   const { data: order, error: orderErr } = await admin
     .from("orders")
@@ -175,7 +185,12 @@ export async function placeOrder(formData: FormData): Promise<ActionResult> {
       status: "pending",
       subtotal,
       total_amount: totalAmount,
+      tax_amount: tax.taxAmount,
+      // Nothing is paid yet, so the full total is outstanding regardless
+      // of the deposit rule. updateOrderAfterPayment recomputes this from
+      // succeeded payments as money actually arrives.
       balance_due_amount: totalAmount,
+      deposit_amount: deposit.usesDeposit ? deposit.depositAmount : 0,
       discount_amount: discountAmount,
       coupon_id: couponId,
       loyalty_points_redeemed: pointsRedeemed,
@@ -197,12 +212,15 @@ export async function placeOrder(formData: FormData): Promise<ActionResult> {
     return { error: "Could not place your order. Please try again." };
   }
 
-  // No real payment processing yet — Module 11's job. This records that a
-  // payment is owed, collectable manually/offline in the meantime.
+  // Records what is owed, collectable manually/offline until a provider
+  // is configured. With a deposit rule set, this creates the up-front
+  // deposit rather than one full payment — mirroring what the quotation
+  // acceptance flow already does for per-quote deposits. The balance
+  // payment is created by the admin when it falls due.
   await admin.from("payments").insert({
     order_id: order.id,
-    type: "full",
-    amount: totalAmount,
+    type: deposit.usesDeposit ? "deposit" : "full",
+    amount: deposit.usesDeposit ? deposit.depositAmount : totalAmount,
     status: "pending",
     provider: "manual",
   });
