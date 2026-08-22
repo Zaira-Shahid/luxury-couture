@@ -3,6 +3,7 @@
 import { getAiProvider } from "@/lib/ai";
 import { applyGuardrails } from "@/lib/ai/guardrails";
 import { getProfile, isStaffRole } from "@/lib/auth/session";
+import { getSiteSettings } from "@/lib/settings/get-site-settings";
 import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
 
@@ -46,6 +47,16 @@ async function requireStaff(): Promise<{ id: string } | null> {
   return { id: profile.id };
 }
 
+/**
+ * Module 25: the admin drafting toggle is enforced HERE, not only by
+ * hiding the button. These are independently addressable POST endpoints,
+ * so a hidden button is a UI convenience and this is the actual switch.
+ */
+async function draftingEnabled(): Promise<boolean> {
+  const settings = await getSiteSettings();
+  return settings.ai.adminDraftingEnabled;
+}
+
 async function recordGeneration(params: {
   kind: string;
   provider: string;
@@ -78,6 +89,9 @@ function warningsFor(violations: { rule: string }[]): string[] {
 export async function generateProductDescription(formData: FormData): Promise<AiDraftResult> {
   const actor = await requireStaff();
   if (!actor) return { error: "Not authorised." };
+  if (!(await draftingEnabled())) {
+    return { error: "AI drafting is switched off in Settings." };
+  }
 
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { error: "Enter a product name first — the draft is written from it." };
@@ -117,6 +131,9 @@ export async function generateProductDescription(formData: FormData): Promise<Ai
 export async function generateEmailDraft(formData: FormData): Promise<AiEmailDraftResult> {
   const actor = await requireStaff();
   if (!actor) return { error: "Not authorised." };
+  if (!(await draftingEnabled())) {
+    return { error: "AI drafting is switched off in Settings." };
+  }
 
   const orderNumber = String(formData.get("orderNumber") ?? "").trim();
   const intent = String(formData.get("intent") ?? "").trim();

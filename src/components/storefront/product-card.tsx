@@ -1,11 +1,9 @@
 import Link from "next/link";
+import { formatMoney } from "@/lib/settings/format";
+
 
 import { StorefrontImage } from "@/components/shared/storefront-image";
 import type { ProductWithImages } from "@/lib/catalog/get-products";
-
-function formatPrice(amount: number, currency: string) {
-  return new Intl.NumberFormat("en-GB", { style: "currency", currency }).format(amount);
-}
 
 export function ProductCard({ product }: { product: ProductWithImages }) {
   const primaryImage =
@@ -27,7 +25,7 @@ export function ProductCard({ product }: { product: ProductWithImages }) {
       </div>
       <p className="mt-3 text-sm">{product.name}</p>
       <p className="text-sm text-muted-foreground">
-        {formatPrice(product.base_price, product.currency)}
+        {formatMoney(product.base_price, product.currency)}
       </p>
     </Link>
   );
