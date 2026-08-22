@@ -1,12 +1,10 @@
 import Link from "next/link";
+import { formatMoney } from "@/lib/settings/format";
+
 
 import { StorefrontImage } from "@/components/shared/storefront-image";
 import { ScrollReveal } from "@/components/motion/scroll-reveal";
 import { getFeaturedProducts } from "@/lib/catalog/get-featured";
-
-function formatPrice(amount: number, currency: string) {
-  return new Intl.NumberFormat("en-GB", { style: "currency", currency }).format(amount);
-}
 
 export async function FeaturedProducts() {
   const products = await getFeaturedProducts();
@@ -35,7 +33,7 @@ export async function FeaturedProducts() {
               </div>
               <p className="mt-3 text-sm">{product.name}</p>
               <p className="text-sm text-muted-foreground">
-                {formatPrice(product.base_price, product.currency)}
+                {formatMoney(product.base_price, product.currency)}
               </p>
             </Link>
           </ScrollReveal>

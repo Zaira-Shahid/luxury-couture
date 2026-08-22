@@ -85,6 +85,6 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
   },
   {
     label: "System",
-    items: [{ href: "/admin/settings", label: "Settings", icon: Settings, comingSoon: true }],
+    items: [{ href: "/admin/settings", label: "Settings", icon: Settings }],
   },
 ];

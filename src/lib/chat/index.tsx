@@ -1,5 +1,6 @@
 import { AssistantWidget } from "@/components/chat/assistant-widget";
 import { MockChatWidget } from "@/components/chat/mock-chat-widget";
+import { getSiteSettings } from "@/lib/settings/get-site-settings";
 
 /**
  * Provider abstraction, same pattern as payments/notifications/shipping/AI
@@ -16,7 +17,13 @@ import { MockChatWidget } from "@/components/chat/mock-chat-widget";
  * switched off in a hurry, and it is what a real third-party live-chat
  * provider would slot in beside.
  */
-export function ChatWidget() {
+export async function ChatWidget() {
+  // Module 25: an admin can switch the assistant off entirely. Checked
+  // here rather than inside the widget so a disabled assistant ships no
+  // markup and no client JS at all, instead of rendering and hiding.
+  const settings = await getSiteSettings();
+  if (!settings.ai.assistantEnabled) return null;
+
   const provider = process.env.CHAT_PROVIDER ?? "assistant";
 
   switch (provider) {

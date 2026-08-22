@@ -24,12 +24,25 @@ import { useConsent } from "@/lib/analytics/use-consent";
  * exist, the same deferral Modules 11 and 14 made for PayPal and courier
  * APIs. The snippets follow each vendor's documented install.
  */
-export function AnalyticsPixels({ initialConsent }: { initialConsent: ConsentState | null }) {
+export function AnalyticsPixels({
+  initialConsent,
+  ids,
+}: {
+  initialConsent: ConsentState | null;
+  /**
+   * Module 25: resolved server-side from admin settings, with the
+   * NEXT_PUBLIC_* env vars as a fallback. They have to arrive as props —
+   * NEXT_PUBLIC_* values are inlined at BUILD time, so a client component
+   * reading process.env directly could never pick up a value an admin
+   * changed at runtime.
+   */
+  ids: { ga: string | null; meta: string | null; tiktok: string | null };
+}) {
   const { marketingAllowed } = useConsent(initialConsent);
 
-  const gaId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
-  const metaId = process.env.NEXT_PUBLIC_META_PIXEL_ID;
-  const tiktokId = process.env.NEXT_PUBLIC_TIKTOK_PIXEL_ID;
+  const gaId = ids.ga;
+  const metaId = ids.meta;
+  const tiktokId = ids.tiktok;
 
   if (!marketingAllowed) return null;
 

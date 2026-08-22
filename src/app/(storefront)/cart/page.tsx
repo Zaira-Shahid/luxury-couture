@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { getMoneyFormatter } from "@/lib/settings/get-money-formatter";
+
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,11 +11,9 @@ import { CartItemRow } from "./cart-item-row";
 
 export const metadata: Metadata = { title: "Cart" };
 
-function formatPrice(amount: number) {
-  return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(amount);
-}
-
 export default async function CartPage() {
+  // Module 25: currency and locale come from Admin -> Settings.
+  const { format: formatPrice, currency, locale } = await getMoneyFormatter();
   const { items } = await getCart();
   const total = items.reduce((sum, item) => sum + item.unit_price_snapshot * item.quantity, 0);
 
@@ -37,7 +37,7 @@ export default async function CartPage() {
           </CardHeader>
           <CardContent>
             {items.map((item) => (
-              <CartItemRow key={item.id} item={item} />
+              <CartItemRow key={item.id} item={item} currency={currency} locale={locale} />
             ))}
             <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
               <p className="font-medium">Estimated total</p>
