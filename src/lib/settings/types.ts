@@ -56,6 +56,28 @@ export type SiteSettings = {
     contactPhone: string | null;
     contactAddress: string | null;
     footerText: string | null;
+    /** Percent, e.g. 20 for 20%. 0 means no tax is applied. */
+    taxRate: number;
+    /** When true, listed prices already contain the tax and it is shown as a breakdown. */
+    taxInclusive: boolean;
+    taxLabel: string;
+    lowStockThreshold: number;
+  };
+  orders: {
+    /** Percent taken up front at cart checkout. 0 charges the full amount at once. */
+    depositPercent: number;
+  };
+  builder: {
+    enabled: boolean;
+    requireInspiration: boolean;
+  };
+  shipping: {
+    freeThreshold: number;
+    defaultCost: number;
+  };
+  notifications: {
+    orderEmailsEnabled: boolean;
+    marketingEmailsEnabled: boolean;
   };
   seo: {
     defaultTitle: string | null;
@@ -117,6 +139,28 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
     contactPhone: null,
     contactAddress: null,
     footerText: null,
+    // Both money rules default to OFF, so existing behaviour is byte-for-byte
+    // unchanged until an admin opts in. Silently starting to charge tax or
+    // split payments on an upgrade would be unacceptable.
+    taxRate: 0,
+    taxInclusive: false,
+    taxLabel: "VAT",
+    lowStockThreshold: 5,
+  },
+  orders: {
+    depositPercent: 0,
+  },
+  builder: {
+    enabled: true,
+    requireInspiration: false,
+  },
+  shipping: {
+    freeThreshold: 0,
+    defaultCost: 0,
+  },
+  notifications: {
+    orderEmailsEnabled: true,
+    marketingEmailsEnabled: true,
   },
   seo: {
     defaultTitle: null,

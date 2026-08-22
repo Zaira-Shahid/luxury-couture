@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import { getCampaignRecipients } from "@/lib/admin/get-campaign-recipients";
 import { logger } from "@/lib/logger";
+import { getSiteSettings } from "@/lib/settings/get-site-settings";
 import { campaignEmail } from "@/lib/email/templates";
 import { sendEmail } from "@/lib/email/send";
 import { createClient } from "@/lib/supabase/server";
@@ -64,6 +65,14 @@ export async function sendCampaign(id: string): Promise<ActionResult> {
   const { data: campaign } = await supabase.from("campaigns").select("*").eq("id", id).single();
   if (!campaign) return { error: "Campaign not found." };
   if (campaign.status === "sent") return { error: "This campaign has already been sent." };
+
+  // Module 25: a master switch for marketing sending. Individual customer
+  // opt-outs are honoured regardless — this is in addition to them, never
+  // instead of them.
+  const settings = await getSiteSettings();
+  if (!settings.notifications.marketingEmailsEnabled) {
+    return { error: "Marketing emails are switched off in Settings." };
+  }
 
   const recipients = await getCampaignRecipients(campaign.target);
   // Recipients are already filtered for opt-outs on every target (0051),

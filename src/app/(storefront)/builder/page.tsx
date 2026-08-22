@@ -3,7 +3,10 @@ import type { Metadata } from "next";
 import { BuilderShell } from "@/components/builder/builder-shell";
 import { getAuthUser } from "@/lib/auth/session";
 import { getBuilderOptionSets } from "@/lib/builder/get-options";
+import { notFound } from "next/navigation";
+
 import { getOptionOccasionLabels } from "@/lib/catalog/get-occasions";
+import { getSiteSettings } from "@/lib/settings/get-site-settings";
 import { getPublishedProducts, getProductBySlug } from "@/lib/catalog/get-products";
 import { buildMetadata } from "@/lib/seo/build-metadata";
 
@@ -36,6 +39,12 @@ export default async function BuilderStartPage({
   searchParams: Promise<{ product?: string }>;
 }) {
   const { product: productSlug } = await searchParams;
+
+  // Module 25: an admin can take the builder offline. notFound() rather
+  // than a message, so a disabled builder is genuinely absent rather than
+  // a page advertising something unavailable.
+  const settings = await getSiteSettings();
+  if (!settings.builder.enabled) notFound();
 
   const [options, products, user, preselected, occasionLabels] = await Promise.all([
     getBuilderOptionSets(),
