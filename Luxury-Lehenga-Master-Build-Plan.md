@@ -1815,7 +1815,32 @@ Target excellent Lighthouse scores where realistically achievable.
 
 # MODULE 29 — SECURITY AUDIT
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
+
+The audit is scripts/test-security.mjs (42 checks), which re-runs with the
+suite — an audit whose output is prose decays the moment someone changes a
+file. NO CRITICAL FINDINGS. Twelve issues found, all closed.
+
+Verified already correct: secret hygiene (all 150 built client bundles
+scanned — no service-role key, Stripe secret or DATABASE_URL), all 16
+createAdminClient() call sites guarded, Stripe signature verification,
+price integrity, cross-user isolation, and both dangerouslySetInnerHTML
+uses.
+
+Fixed: three cron routes were publicly callable because a missing
+CRON_SECRET meant "skip the check" — they now FAIL CLOSED in production
+(503). audit_logs had existed since 0012 with nothing writing to it;
+logAudit() now records refunds, order status changes, role assignment and
+settings. Rate limiting added to the contact, consultation and newsletter
+forms. Security headers added, with CSP shipped REPORT-ONLY pending real
+traffic. reap_stale_carts() reaps ownerless empty carts — 989 had
+accumulated from page views alone; a guest cart WITH items is never
+touched, and the audit asserts both directions.
+
+Known limitations recorded in docs/SECURITY.md rather than left implicit:
+end-to-end price integrity is asserted at source level not behaviourally,
+rate limiting is per-source not distributed, CSP is not yet enforced, and
+no external scanning was performed.
 
 Perform security review:
 
@@ -2851,12 +2876,12 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULE 28 COMPLETE`
+`MODULE 29 COMPLETE`
 
 Current Module:
 
-`MODULE 28 — COMPLETE`
+`MODULE 29 — COMPLETE`
 
 Next Action:
 
-`Start Module 29`
+`Start Module 30`

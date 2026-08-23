@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 import { logger } from "@/lib/logger";
+import { authorizeCron } from "@/lib/security/cron-auth";
 import {
   consultationReminderTemplate,
   paymentReminderTemplate,
@@ -40,13 +41,11 @@ const APPOINTMENT_REMINDER_WINDOW_HOURS = 48;
  * is logged either way.
  */
 export async function GET(request: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const authHeader = request.headers.get("authorization");
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-  }
+  // MODULE 29: fails CLOSED in production. This used to skip the
+  // check entirely when CRON_SECRET was unset, which made the route
+  // publicly callable. See lib/security/cron-auth.ts.
+  const unauthorized = authorizeCron(request);
+  if (unauthorized) return unauthorized;
 
   const admin = createAdminClient();
   const now = Date.now();

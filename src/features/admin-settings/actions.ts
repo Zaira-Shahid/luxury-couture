@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { getProfile, isStaffRole } from "@/lib/auth/session";
 import { logger } from "@/lib/logger";
+import { logAudit } from "@/lib/security/audit";
 import { entriesForSection, type SettingSection } from "@/lib/settings/registry";
 import { createClient } from "@/lib/supabase/server";
 
@@ -95,6 +96,18 @@ export async function updateSettingsSection(
   // Settings reach every route — brand name in metadata, theme variables
   // on <html>, currency in prices — so the whole layout is revalidated.
   revalidatePath("/", "layout");
+  // MODULE 29: settings hold operational switches (indexing, order
+  // emails, tax rules), so "who turned this off and when" is a real
+  // question. Only the section and the keys touched are recorded — the
+  // values themselves can contain business configuration that does not
+  // need a second copy.
+  await logAudit({
+    action: "settings.updated",
+    entityType: "settings_section",
+    entityId: null,
+    after: { section, keys: toUpsert.map((row) => row.key) },
+  });
+
   revalidatePath("/admin/settings");
   return { success: true };
 }

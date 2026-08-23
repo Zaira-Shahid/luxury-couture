@@ -1,0 +1,12 @@
+-- Module 29 follow-up — restore execute to service_role.
+--
+-- 0058 revoked execute on reap_stale_carts() from public/anon/authenticated,
+-- which was the intent: nothing reachable from a browser should be able to
+-- delete rows. But `revoke ... from public` also removes the grant that
+-- service_role inherits through PUBLIC, so the cron — the one caller that
+-- is supposed to run this — lost access too, and the audit caught it as
+-- "permission denied for function reap_stale_carts".
+--
+-- Granting execute to service_role explicitly is the correct end state
+-- rather than a workaround: exactly one role can run it, and it is named.
+grant execute on function public.reap_stale_carts(integer) to service_role;

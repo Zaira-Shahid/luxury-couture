@@ -3,10 +3,22 @@
 import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
 import { newsletterSchema } from "@/lib/validations/marketing";
+import { checkRateLimit } from "@/lib/security/rate-limit";
 
 export type ActionResult = { error: string } | { success: true };
 
 export async function subscribeToNewsletter(formData: FormData): Promise<ActionResult> {
+  // MODULE 29: this endpoint is anonymous, writes a row and sends
+  // mail. Unlimited, a trivial loop meant unbounded rows plus
+  // outbound email from this domain — a deliverability problem as
+  // much as a database one. Checked BEFORE any work is done.
+  const limited = await checkRateLimit(
+    "newsletter",
+    5,
+    "Too many signup attempts. Please try again shortly."
+  );
+  if (!limited.allowed) return { error: limited.message };
+
   const parsed = newsletterSchema.safeParse({ email: formData.get("email") });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Enter a valid email address." };
