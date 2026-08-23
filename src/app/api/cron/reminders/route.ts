@@ -127,7 +127,7 @@ export async function GET(request: NextRequest) {
 
   const { data: upcoming, error: appointmentsError } = await admin
     .from("appointments")
-    .select("id, customer_id, type, scheduled_at, status")
+    .select("id, customer_id, type, scheduled_at, status, contact_email")
     .eq("status", "confirmed")
     .gt("scheduled_at", new Date(now).toISOString())
     .lt("scheduled_at", windowEnd);
@@ -138,21 +138,29 @@ export async function GET(request: NextRequest) {
 
   let appointmentsSent = 0;
   for (const appointment of upcoming ?? []) {
-    // A guest booking has no account and no in-app inbox. Appointments
-    // carry no contact column of their own, so there is nothing to send
-    // to — skipping is the honest behaviour rather than silently
-    // pretending a reminder went out.
-    if (!appointment.customer_id) continue;
-
+    // GUESTS ARE REMINDED TOO. `appointments` carries its own
+    // contact_email (added by 0028 precisely so a guest booking is
+    // contactable), so there is a real address to send to even with no
+    // account behind it. notify() skips the in-app row when profileId is
+    // null and still sends the email, which is exactly right: a guest has
+    // no inbox to file it in, but they do have an appointment tomorrow.
+    //
     // Only ever once per appointment: unlike a balance, there is no
     // second occasion to remind someone about the same booking.
     if (!(await claim("appointment", appointment.id, "consultation_reminder"))) continue;
 
-    const { data: authUser } = await admin.auth.admin.getUserById(appointment.customer_id);
+    // A signed-in customer's account address is preferred over the one
+    // typed into the booking form — it is the address they actually sign
+    // in with, and the one every other notification already goes to.
+    let email = appointment.contact_email || null;
+    if (appointment.customer_id) {
+      const { data: authUser } = await admin.auth.admin.getUserById(appointment.customer_id);
+      email = authUser?.user?.email ?? email;
+    }
 
     await notify(admin, {
       profileId: appointment.customer_id,
-      email: authUser?.user?.email ?? null,
+      email,
       ...consultationReminderTemplate(appointment.scheduled_at, appointment.type),
     });
     appointmentsSent += 1;

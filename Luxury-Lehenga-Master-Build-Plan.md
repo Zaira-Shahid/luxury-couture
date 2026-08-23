@@ -1723,7 +1723,31 @@ Permissions must be enforced server-side/RLS.
 
 # MODULE 27 — CUSTOMER NOTIFICATION CENTER
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
+
+Built in two passes. Notifications now carry a category and a deep link,
+derived inside notify() from the `type` its 18 call sites already pass, so
+none of them changed. The centre has category filters, unread-only, mark
+all/one read and unread, pagination, and an unread badge in the account nav
+and site header. Per-category EMAIL preferences via notification_preferences
+and wants_email(); the in-app feed is deliberately NOT suppressible — it is
+the customer's record of what happened. Marketing stays on the existing
+profiles.marketing_opt_out rather than becoming a second source of truth.
+
+Pass 2 adds /api/cron/reminders (daily): outstanding balances and
+consultations in the next 48 hours, with a notification_reminders ledger
+whose primary key makes a double-send impossible rather than merely
+unlikely. Guests are reminded too, by the contact_email 0028 added.
+
+Verification: policies 260 -> 262, additive only. All pre-existing scripts
+held to identical counts. test-notification-center.mjs 54/0,
+test-reminders.mjs 27/0 (1 skip: CRON_SECRET unset locally).
+
+Four real bugs found by the negative half of the tests: unstable pagination
+(created_at ties reshuffle between pages), notify() silencing WhatsApp when
+order emails were switched off, guest appointments being skipped entirely,
+and /forgot-password reporting success when Supabase's SMTP rate limit meant
+nothing was sent. Full detail in docs/NOTIFICATIONS.md.
 
 Customer dashboard notification center:
 
@@ -2799,12 +2823,12 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULE 26 COMPLETE`
+`MODULE 27 COMPLETE`
 
 Current Module:
 
-`MODULE 26 — COMPLETE`
+`MODULE 27 — COMPLETE`
 
 Next Action:
 
-`Start Module 27`
+`Start Module 28`

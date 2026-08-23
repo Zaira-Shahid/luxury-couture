@@ -10,6 +10,8 @@
 // Needs a running production server: the cron is an HTTP route.
 import { createClient } from "@supabase/supabase-js";
 
+import { purgeDevtestData } from "./lib/purge-devtest.mjs";
+
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
@@ -55,6 +57,11 @@ async function runCron() {
   const res = await fetch(`${APP_URL}/api/cron/reminders`, { redirect: "manual" });
   return { status: res.status, body: await res.json().catch(() => null) };
 }
+
+// Idempotent setup — see scripts/lib/purge-devtest.mjs. A crashed
+// earlier run must not become this run's input.
+const purged = await purgeDevtestData(admin);
+if (purged > 0) console.log(`(purged ${purged} leaked dev-test account(s) from a previous run)`);
 
 const customer = await makeCustomer("customer");
 await new Promise((r) => setTimeout(r, 400));
@@ -143,6 +150,8 @@ const { data: appointment } = await admin
     customer_id: customer.id,
     type: "consultation",
     status: "confirmed",
+    contact_name: "Reminder Test",
+    contact_email: customer.email,
     scheduled_at: new Date(Date.now() + 24 * 3_600_000).toISOString(),
   })
   .select("id")
@@ -155,6 +164,8 @@ const { data: farAppointment } = await admin
     customer_id: customer.id,
     type: "fitting",
     status: "confirmed",
+    contact_name: "Reminder Test",
+    contact_email: customer.email,
     scheduled_at: new Date(Date.now() + 10 * 86_400_000).toISOString(),
   })
   .select("id")
@@ -166,12 +177,30 @@ const { data: unconfirmedAppointment } = await admin
     customer_id: customer.id,
     type: "consultation",
     status: "requested",
+    contact_name: "Reminder Test",
+    contact_email: customer.email,
     scheduled_at: new Date(Date.now() + 24 * 3_600_000).toISOString(),
   })
   .select("id")
   .single();
 
-check("seeded the fixtures", !!owingOrder && !!appointment);
+// A GUEST booking — no account, but appointments carry their own
+// contact_email (0028) precisely so a guest is contactable. This is the
+// case the first version of the cron wrongly skipped.
+const { data: guestAppointment } = await admin
+  .from("appointments")
+  .insert({
+    customer_id: null,
+    type: "consultation",
+    status: "confirmed",
+    contact_name: "Guest Booker",
+    contact_email: `m27r-guest-${suffix}@example.com`,
+    scheduled_at: new Date(Date.now() + 24 * 3_600_000).toISOString(),
+  })
+  .select("id")
+  .single();
+
+check("seeded the fixtures", !!owingOrder && !!appointment && !!guestAppointment);
 
 // ---------------------------------------------------------------------
 console.log("\n# First run");
@@ -220,6 +249,18 @@ check("an appointment outside the window is not reminded", !claimedIds.has(farAp
 check(
   "an unconfirmed appointment is not reminded",
   !claimedIds.has(unconfirmedAppointment.id)
+);
+
+// The guest case, both halves: claimed and emailed, but no in-app row,
+// because there is no account to file one against.
+check("a guest appointment IS reminded", claimedIds.has(guestAppointment.id));
+const { data: guestNotifications } = await admin
+  .from("notifications")
+  .select("id")
+  .is("profile_id", null);
+check(
+  "a guest reminder writes no in-app row (there is no inbox for it)",
+  (guestNotifications?.length ?? 0) === 0
 );
 
 // ---------------------------------------------------------------------
@@ -330,12 +371,18 @@ await admin.from("notification_reminders").delete().in("entity_id", [
   appointment.id,
   farAppointment.id,
   unconfirmedAppointment.id,
+  guestAppointment.id,
 ]);
 await admin.from("notifications").delete().eq("profile_id", customer.id);
 await admin
   .from("appointments")
   .delete()
-  .in("id", [appointment.id, farAppointment.id, unconfirmedAppointment.id]);
+  .in("id", [
+    appointment.id,
+    farAppointment.id,
+    unconfirmedAppointment.id,
+    guestAppointment.id,
+  ]);
 await admin
   .from("orders")
   .delete()

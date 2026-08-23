@@ -26,7 +26,15 @@ export default async function AccountLayout({
         <AccountNav unreadCount={unreadCount} />
         <SignOutButton />
       </aside>
-      <div className="min-w-0 flex-1">{children}</div>
+      {/*
+        MODULE 28: this layout had no <main> landmark at all, so the
+        account area gave a screen-reader user nothing to jump to and the
+        root skip link had no target here. (account) is a sibling of
+        (storefront), not nested inside it, so this id cannot collide.
+      */}
+      <main id="main-content" className="min-w-0 flex-1">
+        {children}
+      </main>
     </div>
   );
 }

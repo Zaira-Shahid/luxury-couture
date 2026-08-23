@@ -25,7 +25,7 @@ export default async function AdminLayout({
       <AdminSidebar permissions={permissions} />
       <div className="flex min-h-screen flex-1 flex-col">
         <AdminTopbar profile={profile} permissions={permissions} />
-        <main className="flex-1">{children}</main>
+        <main id="main-content" className="flex-1">{children}</main>
       </div>
     </div>
   );
