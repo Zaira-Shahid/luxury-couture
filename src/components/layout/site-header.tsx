@@ -5,15 +5,19 @@ import { getAuthUser } from "@/lib/auth/session";
 import { getCurrentBanner } from "@/lib/admin/get-banners";
 import { getCartItemCount } from "@/lib/cart/get-cart";
 import { getSiteSettings } from "@/lib/settings/get-site-settings";
+import { getUnreadNotificationCount } from "@/lib/notifications/get-notifications";
 
 import { AnnouncementBar } from "./announcement-bar";
 
 export async function SiteHeader() {
-  const [user, settings, cartCount, banner] = await Promise.all([
+  const [user, settings, cartCount, banner, unreadCount] = await Promise.all([
     getAuthUser(),
     getSiteSettings(),
     getCartItemCount(),
     getCurrentBanner(),
+    // Module 27: returns 0 for a signed-out visitor without querying, so
+    // this costs nothing on the pages most people see.
+    getUnreadNotificationCount(),
   ]);
 
   return (
@@ -53,6 +57,14 @@ export async function SiteHeader() {
             {user ? (
               <Link href="/account" className="transition-colors hover:text-foreground">
                 My account
+                {unreadCount > 0 ? (
+                  <span
+                    className="ml-1.5 inline-flex min-w-4 items-center justify-center rounded-full bg-foreground px-1 text-[10px] font-medium text-background"
+                    aria-label={`${unreadCount} unread notifications`}
+                  >
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                ) : null}
               </Link>
             ) : (
               <>

@@ -40,6 +40,7 @@ export async function markPaymentPaidManually(paymentId: string): Promise<Action
   if (order) {
     await notify(supabase, {
       profileId: order.customer_id,
+      entityId: payment.order_id,
       ...depositPaidTemplate(order.order_number, payment.type, payment.amount, payment.currency),
     });
 
@@ -108,6 +109,7 @@ export async function createAdditionalPayment(orderId: string, formData: FormDat
 
   await notify(supabase, {
     profileId: order.customer_id,
+    entityId: orderId,
     ...balanceDueTemplate(order.order_number, parsed.data.amount, order.currency),
   });
 

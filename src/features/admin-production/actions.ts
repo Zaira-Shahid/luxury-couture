@@ -60,7 +60,11 @@ export async function advanceProductionStatus(productionOrderId: string, formDat
       parsed.data.status === "quality_check"
         ? qcCompleteTemplate(order.order_number)
         : productionStatusChangedTemplate(order.order_number, parsed.data.status);
-    await notify(supabase, { profileId: order.customer_id, ...template });
+    await notify(supabase, {
+      profileId: order.customer_id,
+      entityId: production.order_id,
+      ...template,
+    });
   }
 
   revalidatePath(`/admin/production/${productionOrderId}`);
