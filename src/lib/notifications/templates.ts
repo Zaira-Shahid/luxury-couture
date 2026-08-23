@@ -181,3 +181,41 @@ export function abandonedCartTemplate(siteUrl: string): NotificationTemplate {
     body: `Your cart is still waiting for you — pick up where you left off at ${siteUrl}/cart.`,
   };
 }
+
+/**
+ * MODULE 27 PASS 2 — scheduled reminders.
+ *
+ * Distinct types from balanceDueTemplate/appointment confirmations on
+ * purpose. A reminder is not the same event as the thing it reminds you
+ * about: it must be separately suppressible, separately counted, and
+ * distinguishable in the feed from the original notice.
+ */
+export function paymentReminderTemplate(
+  orderNumber: string,
+  amount: number,
+  currency: string
+): NotificationTemplate {
+  return {
+    type: "payment_reminder",
+    title: "A balance is still outstanding",
+    body: `A payment of ${formatPrice(amount, currency)} is still outstanding on order ${orderNumber}. You can settle it from your account.`,
+  };
+}
+
+export function consultationReminderTemplate(
+  scheduledAt: string,
+  type: string
+): NotificationTemplate {
+  const when = new Date(scheduledAt).toLocaleString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return {
+    type: "consultation_reminder",
+    title: "Your appointment is tomorrow",
+    body: `A reminder that your ${type} is scheduled for ${when}. We look forward to seeing you.`,
+  };
+}

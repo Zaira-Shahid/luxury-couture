@@ -110,10 +110,14 @@ export async function advanceShippingStatus(shippingOrderId: string, formData: F
       : isNewlyDelivered
         ? deliveredTemplate(order.order_number)
         : shippingStatusChangedTemplate(order.order_number, parsed.data.status);
-    await notify(supabase, { profileId: order.customer_id, ...template });
+    await notify(supabase, { profileId: order.customer_id, entityId: shipping.order_id, ...template });
 
     if (isNewlyDelivered) {
-      await notify(supabase, { profileId: order.customer_id, ...reviewRequestTemplate(order.order_number) });
+      await notify(supabase, {
+        profileId: order.customer_id,
+        entityId: shipping.order_id,
+        ...reviewRequestTemplate(order.order_number),
+      });
     }
   }
 

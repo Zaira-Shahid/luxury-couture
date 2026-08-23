@@ -19,7 +19,7 @@ const NAV_ITEMS = [
   { href: "/account/referrals", label: "Referrals" },
 ] as const;
 
-export function AccountNav() {
+export function AccountNav({ unreadCount = 0 }: { unreadCount?: number }) {
   const pathname = usePathname();
 
   return (
@@ -38,6 +38,14 @@ export function AccountNav() {
             )}
           >
             {item.label}
+            {item.href === "/account/notifications" && unreadCount > 0 ? (
+              <span
+                className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full bg-foreground px-1.5 py-0.5 text-xs font-medium text-background"
+                aria-label={`${unreadCount} unread`}
+              >
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            ) : null}
           </Link>
         );
       })}

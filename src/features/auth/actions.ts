@@ -102,6 +102,24 @@ export async function signOut(): Promise<void> {
   redirect("/login");
 }
 
+/**
+ * Whether a Supabase auth error is about SENDING the mail rather than
+ * about the address it was sent to.
+ *
+ * The distinction is the whole point: a delivery failure says something
+ * about this deployment's mail configuration and is safe (and useful) to
+ * show, while anything about the identity behind the address must stay
+ * hidden or the form becomes an account-enumeration oracle.
+ */
+function isMailDeliveryError(error: { code?: string; status?: number }): boolean {
+  return (
+    error.code === "over_email_send_rate_limit" ||
+    error.code === "over_request_rate_limit" ||
+    error.code === "email_provider_disabled" ||
+    error.status === 429
+  );
+}
+
 export async function requestPasswordReset(formData: FormData): Promise<ActionResult> {
   const parsed = forgotPasswordSchema.safeParse({ email: formData.get("email") });
   if (!parsed.success) return { error: firstIssueMessage(parsed.error) };
@@ -111,9 +129,33 @@ export async function requestPasswordReset(formData: FormData): Promise<ActionRe
     redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback?next=/reset-password`,
   });
 
-  // Always report success, regardless of whether the email exists — an
-  // account-enumeration guard, not an error-swallowing shortcut.
-  if (error) logger.warn("password reset request failed", { message: error.message });
+  if (error) {
+    logger.warn("password reset request failed", { message: error.message, code: error.code });
+
+    // DELIVERY failures are surfaced; IDENTITY failures are not.
+    //
+    // Swallowing everything was hiding a real problem: when Supabase's
+    // built-in SMTP hits its rate limit it returns 429
+    // over_email_send_rate_limit and sends nothing, but the customer was
+    // still shown "check your email" — so the only visible symptom of a
+    // blocked reset was an email that never arrived, and the natural
+    // response (try again) burns the same limit and makes it worse.
+    //
+    // Telling them is safe. These codes are properties of the PROJECT's
+    // mail sending, not of the address typed in: they are returned
+    // identically whether or not an account exists, so they leak nothing
+    // an attacker could enumerate with. "User not found" and friends stay
+    // swallowed, which is what the enumeration guard was actually for.
+    if (isMailDeliveryError(error)) {
+      return {
+        error:
+          "We couldn't send the email just now — too many have been requested recently. Please wait an hour and try again.",
+      };
+    }
+  }
+
+  // Otherwise always report success, whether or not the address has an
+  // account — the account-enumeration guard.
   redirect("/forgot-password/check-email");
 }
 

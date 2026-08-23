@@ -536,7 +536,19 @@ export interface Notification {
   channel: NotificationChannel;
   read_at: ISODateTime | null;
   metadata: unknown;
+  /** Module 27: derived from `type` in notify(). Null for an unclassified row. */
+  category: string | null;
+  /** Module 27: deep link to the record this is about. */
+  link: string | null;
   created_at: ISODateTime;
+}
+
+/** Module 27: per-category EMAIL opt-out. An absent row means opted in. */
+export interface NotificationPreference {
+  profile_id: UUID;
+  category: string;
+  email_enabled: boolean;
+  updated_at: ISODateTime;
 }
 
 export interface Review {
