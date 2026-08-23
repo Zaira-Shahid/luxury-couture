@@ -10,7 +10,7 @@ export default function LoginPage() {
   return (
     <Card className="w-full max-w-sm">
       <CardHeader>
-        <CardTitle className="text-2xl">Sign in</CardTitle>
+        <CardTitle as="h1" className="text-2xl">Sign in</CardTitle>
         <CardDescription>Welcome back.</CardDescription>
       </CardHeader>
       <CardContent>

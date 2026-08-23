@@ -20,7 +20,7 @@ export default async function NotificationPreferencesPage() {
   return (
     <Card>
       <CardHeader className="flex flex-col gap-1.5">
-        <CardTitle>Email preferences</CardTitle>
+        <CardTitle as="h1">Email preferences</CardTitle>
         <CardDescription>
           Choose which updates reach your inbox. Everything still appears in your{" "}
           <Link href="/account/notifications" className="underline underline-offset-4">

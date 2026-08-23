@@ -16,7 +16,7 @@ export default async function RegisterPage({
   return (
     <Card className="w-full max-w-sm">
       <CardHeader>
-        <CardTitle className="text-2xl">Create an account</CardTitle>
+        <CardTitle as="h1" className="text-2xl">Create an account</CardTitle>
         <CardDescription>Save your measurements, orders, and wishlist.</CardDescription>
       </CardHeader>
       <CardContent>

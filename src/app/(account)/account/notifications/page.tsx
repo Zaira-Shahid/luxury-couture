@@ -43,7 +43,7 @@ export default async function NotificationsPage({
     <Card>
       <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex flex-col gap-1.5">
-          <CardTitle>Notifications</CardTitle>
+          <CardTitle as="h1">Notifications</CardTitle>
           <CardDescription>
             {totalUnread > 0
               ? `${totalUnread} unread ${totalUnread === 1 ? "update" : "updates"}.`

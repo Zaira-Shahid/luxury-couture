@@ -30,7 +30,7 @@ export default async function NewReviewPage({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Leave a Review</CardTitle>
+        <CardTitle as="h1">Leave a Review</CardTitle>
         <CardDescription>Order {detail.order.order_number}</CardDescription>
       </CardHeader>
       <CardContent>

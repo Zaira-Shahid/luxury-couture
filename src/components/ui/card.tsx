@@ -33,9 +33,25 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
+/**
+ * MODULE 28: gains an optional `as`.
+ *
+ * This renders a <div> by default, which is right for a card that is one
+ * item among many on a page. But on the auth and account screens the card
+ * IS the page, and its title is the page's heading — so those routes were
+ * shipping no <h1> at all, leaving a screen-reader user with no way to
+ * identify the page or navigate by heading.
+ *
+ * The default stays <div> so no existing usage changes; the pages where
+ * the card title is genuinely the page title opt in with as="h1".
+ */
+function CardTitle({
+  className,
+  as: Component = "div",
+  ...props
+}: React.ComponentProps<"div"> & { as?: "div" | "h1" | "h2" | "h3" }) {
   return (
-    <div
+    <Component
       data-slot="card-title"
       className={cn(
         "text-base leading-snug font-medium group-data-[size=sm]/card:text-sm",

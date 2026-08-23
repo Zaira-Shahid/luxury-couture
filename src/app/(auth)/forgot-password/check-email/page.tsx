@@ -8,7 +8,7 @@ export default function CheckEmailPage() {
   return (
     <Card className="w-full max-w-sm">
       <CardHeader>
-        <CardTitle className="text-2xl">Check your email</CardTitle>
+        <CardTitle as="h1" className="text-2xl">Check your email</CardTitle>
         <CardDescription>
           If an account exists for that address, we&apos;ve sent a link to reset your password.
         </CardDescription>

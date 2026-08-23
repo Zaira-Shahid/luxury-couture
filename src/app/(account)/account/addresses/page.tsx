@@ -21,7 +21,7 @@ export default async function AddressesPage() {
     <div className="flex flex-col gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>Saved addresses</CardTitle>
+          <CardTitle as="h1">Saved addresses</CardTitle>
         </CardHeader>
         <CardContent>
           {addresses?.length ? (

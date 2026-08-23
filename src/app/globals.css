@@ -215,3 +215,91 @@
   color: var(--foreground);
   outline: 2px solid var(--ring);
 }
+
+/*
+ * MODULE 28 PASS 2 — motion without framer-motion.
+ *
+ * framer-motion was a 5.4 MB dependency shipped on every storefront route
+ * (PageTransition sits in the layout) to do three things: a route-change
+ * fade, a scroll-reveal, and the hero's staggered entrance. All three are
+ * plain CSS.
+ *
+ * Beyond bundle size there is an accessibility gain: these honour the
+ * prefers-reduced-motion block above automatically, because they ARE CSS
+ * animations. framer-motion's JS-driven transforms ignored it.
+ */
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-page-in {
+  animation: fade-in 0.3s ease-out both;
+}
+
+/*
+ * Scroll reveal. The element starts hidden and animates once its
+ * `data-revealed` attribute is set by an IntersectionObserver.
+ *
+ * The starting state is deliberately applied only when the observer has
+ * had a chance to mark the element — `:not([data-revealed])` alone would
+ * leave content permanently invisible if JS never ran. See
+ * use-reveal-on-scroll.ts for the no-JS story.
+ */
+.reveal[data-revealed="false"] {
+  opacity: 0;
+  transform: translateY(24px);
+}
+
+.reveal[data-revealed="true"] {
+  animation: rise-in 0.6s ease-out both;
+  animation-delay: var(--reveal-delay, 0ms);
+}
+
+/*
+ * Hero entrance.
+ *
+ * `settle-in` animates TRANSFORM ONLY, with no opacity fade, and that is
+ * a deliberate Core Web Vitals decision rather than a style preference:
+ * the hero <h1> is this page's LCP element, and an element at opacity 0
+ * has not painted, so a 0.7s fade pushes LCP out by the length of the
+ * animation. Moving an already-opaque element costs nothing by that
+ * measure.
+ *
+ * The smaller supporting lines are not LCP candidates, so they keep the
+ * fade — `rise-in` above.
+ */
+@keyframes settle-in {
+  from {
+    transform: translateY(16px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-settle-in {
+  animation: settle-in 0.7s ease-out both;
+  animation-delay: var(--stagger, 0ms);
+}
+
+.animate-rise-in {
+  animation: rise-in 0.7s ease-out both;
+  animation-delay: var(--stagger, 0ms);
+}

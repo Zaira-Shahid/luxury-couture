@@ -24,7 +24,7 @@ export default async function LoyaltyPage() {
     <div className="flex flex-col gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>Loyalty Points</CardTitle>
+          <CardTitle as="h1">Loyalty Points</CardTitle>
           <CardDescription>Earn 1 point for every £1 spent — 100 points = £1 off at checkout.</CardDescription>
         </CardHeader>
         <CardContent>

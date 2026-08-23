@@ -26,7 +26,7 @@ export default async function OrdersPage() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Orders</CardTitle>
+        <CardTitle as="h1">Orders</CardTitle>
         <CardDescription>Track your custom orders here.</CardDescription>
       </CardHeader>
       <CardContent>
