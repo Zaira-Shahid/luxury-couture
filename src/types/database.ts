@@ -12,7 +12,38 @@
 export type UUID = string;
 export type ISODateTime = string;
 
-export type UserRole = "customer" | "admin" | "staff" | "production";
+/**
+ * Module 26 expanded this from customer/admin/staff/production to the
+ * full role set. `staff` is kept and marked deprecated rather than
+ * removed: dropping it would make any existing row carrying it violate
+ * the CHECK constraint. The canonical list lives in
+ * `lib/auth/permissions.ts` (ADMIN_ROLES) and in 0053's constraint.
+ */
+export type UserRole =
+  | "customer"
+  | "super_admin"
+  | "admin"
+  | "sales"
+  | "production"
+  | "qc"
+  | "finance"
+  | "support"
+  | "marketing"
+  /** @deprecated Assign a specific role instead. */
+  | "staff";
+
+/** Module 26: the permission catalogue. Seeded in 0053, extendable by later modules. */
+export interface PermissionRow {
+  key: string;
+  domain: string;
+  description: string;
+}
+
+/** Module 26: role to permission mapping, editable in Admin -> Team. */
+export interface RolePermission {
+  role: UserRole;
+  permission_key: string;
+}
 
 export interface Profile {
   id: UUID;

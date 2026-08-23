@@ -5,14 +5,27 @@ import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 
-import { ADMIN_NAV_GROUPS } from "./admin-nav-items";
+import { navGroupsFor } from "./admin-nav-items";
 
-export function AdminSidebarNav({ onNavigate }: { onNavigate?: () => void }) {
+export function AdminSidebarNav({
+  onNavigate,
+  permissions,
+}: {
+  onNavigate?: () => void;
+  /**
+   * Module 26: resolved server-side from the signed-in user. Filtering
+   * here is COSMETIC — it keeps a Finance user from being shown a
+   * Production menu they cannot use. The real enforcement is the route
+   * guard and RLS, per the plan's "never rely only on hiding UI buttons".
+   */
+  permissions: string[];
+}) {
   const pathname = usePathname();
+  const groups = navGroupsFor(new Set(permissions));
 
   return (
     <nav className="flex flex-col gap-6">
-      {ADMIN_NAV_GROUPS.map((group) => (
+      {groups.map((group) => (
         <div key={group.label} className="flex flex-col gap-1">
           <p className="px-3 text-xs font-medium tracking-wide text-sidebar-foreground/50 uppercase">
             {group.label}
@@ -46,10 +59,10 @@ export function AdminSidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-export function AdminSidebar() {
+export function AdminSidebar({ permissions }: { permissions: string[] }) {
   return (
     <aside className="sticky top-0 hidden h-screen w-64 shrink-0 overflow-y-auto border-r border-sidebar-border bg-sidebar px-3 py-6 md:block">
-      <AdminSidebarNav />
+      <AdminSidebarNav permissions={permissions} />
     </aside>
   );
 }
