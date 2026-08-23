@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
-import { ADMIN_ROLES } from "@/lib/auth/permissions";
+import { ADMIN_ROLES, permissionForAdminPath } from "@/lib/auth/permissions";
 import { isReservedRootSlug } from "@/lib/routes/reserved-slugs";
 
 // Module 26: the coarse "may reach the admin shell at all" gate, now
@@ -95,6 +95,32 @@ export async function updateSession(request: NextRequest) {
 
     if (!profile || !STAFF_ROLES.has(profile.role)) {
       return NextResponse.redirect(new URL("/", request.url));
+    }
+
+    // Module 26: the per-route permission guard. STAFF_ROLES above only
+    // answers "may this person see an admin shell at all"; this answers
+    // "may they see THIS screen", which is what keeps a Sales account off
+    // /admin/payments rather than merely hiding the menu entry.
+    //
+    // Refusals land on /admin, the one route every admin role may reach,
+    // which is also why that route carries no permission rule of its own.
+    //
+    // This is a guard, not the boundary. RLS still refuses the underlying
+    // reads and writes, and Server Actions call requirePermission()
+    // themselves, because a Server Action is an independently addressable
+    // POST endpoint that a route guard never sees.
+    const required = permissionForAdminPath(pathname);
+    if (required && profile.role !== "super_admin") {
+      const { data: granted } = await supabase
+        .from("role_permissions")
+        .select("permission_key")
+        .eq("role", profile.role)
+        .eq("permission_key", required)
+        .maybeSingle();
+
+      // Fails closed: a failed lookup yields no row, which reads as
+      // "refused" rather than "allowed".
+      if (!granted) return NextResponse.redirect(new URL("/admin", request.url));
     }
   }
 

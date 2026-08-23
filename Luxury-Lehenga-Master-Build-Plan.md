@@ -1217,7 +1217,8 @@ Module 8's media library as a picker rather than a new Storage bucket, per its o
 fast-follow. Inventory is one generic table [fabric/material/embroidery_material via a category
 column], not three; reserved_quantity stays admin-edited only, by explicit approval — no
 bill-of-materials system. No staff/production RLS carve-out for inventory — that gap stays
-deferred to Module 26 project-wide.)
+deferred to Module 26 project-wide. CLOSED in Module 26: 0054 grants inventory_items to
+inventory.write, which the production role holds.)
 
 Admin can manage:
 
@@ -1673,7 +1674,31 @@ Use feature flags.
 
 # MODULE 26 — ADMIN ROLES & PERMISSIONS
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
+
+Built in two passes. Nine roles and 23 permissions in `role_permissions`, resolved through one
+`has_permission()` function that RLS, the middleware route guard, `requirePermission()` in Server
+Actions and the sidebar filter all consult. Admin -> Team (`/admin/team`, behind `roles.manage`)
+assigns roles and edits the matrix. Full detail in `docs/PERMISSIONS.md`.
+
+"Never rely only on hiding UI buttons" is honoured literally: the sidebar filter is documented as
+cosmetic in the code itself, and enforcement is RLS first, then the route guard, then the action
+guard.
+
+The design constraint was that 151 existing RLS policies call `is_admin()`, so migrations `0054`
+and `0055` only ADD policies. PERMISSIVE policies are OR'd, so an addition cannot narrow anyone's
+access, and `scripts/snapshot-policies.mjs --diff` proves it mechanically: 173 -> 260 policies,
+87 added, 0 removed, 0 changed. `scripts/run-suite.mjs --diff` held every pre-existing script to
+identical counts, and `scripts/test-permissions.mjs` adds 125 checks whose negative half is the
+substantive half.
+
+Two deliberate behaviour changes: `is_admin()` widened to include `super_admin`, and role
+assignment narrowed from "any admin" to `has_permission('roles.manage')` — a plain `admin` can no
+longer change anyone's role. Existing admins were promoted to `super_admin` by `0053`.
+
+The negative testing found a real over-grant: `0054` gave `production` a blanket `orders.read`,
+undoing Module 13's handed-off-only rule. `0055` removed the permission rather than weakening the
+policy.
 
 Implement granular permissions.
 
@@ -2774,12 +2799,12 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULE 25 COMPLETE`
+`MODULE 26 COMPLETE`
 
 Current Module:
 
-`MODULE 25 — COMPLETE`
+`MODULE 26 — COMPLETE`
 
 Next Action:
 
-`Start Module 26`
+`Start Module 27`
