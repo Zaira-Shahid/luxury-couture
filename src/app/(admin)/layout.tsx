@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
 import { AdminTopbar } from "@/components/admin/admin-topbar";
-import { getProfile, isStaffRole } from "@/lib/auth/session";
+import { getMyPermissions, getProfile, isStaffRole } from "@/lib/auth/session";
 
 export default async function AdminLayout({
   children,
@@ -15,11 +15,16 @@ export default async function AdminLayout({
   if (!profile) redirect("/login?next=/admin");
   if (!isStaffRole(profile.role)) redirect("/");
 
+  // Module 26: resolved once here and passed down, so the sidebar only
+  // offers what this role can actually use. Cosmetic — every admin route
+  // guards itself and RLS sits underneath both.
+  const permissions = [...(await getMyPermissions())];
+
   return (
     <div className="flex min-h-screen bg-muted/30">
-      <AdminSidebar />
+      <AdminSidebar permissions={permissions} />
       <div className="flex min-h-screen flex-1 flex-col">
-        <AdminTopbar profile={profile} />
+        <AdminTopbar profile={profile} permissions={permissions} />
         <main className="flex-1">{children}</main>
       </div>
     </div>
