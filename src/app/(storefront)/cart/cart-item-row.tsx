@@ -5,7 +5,7 @@ import { useTransition } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { StorefrontImage } from "@/components/ui/storefront-image";
+import { StorefrontImage } from "@/components/shared/storefront-image";
 import { removeCartItem, updateCartItemQuantity } from "@/features/cart/actions";
 import type { EnrichedCartItem } from "@/lib/cart/get-cart";
 

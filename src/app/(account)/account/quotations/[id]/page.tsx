@@ -51,7 +51,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
     <div className="flex flex-col gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>Quotation — {formatPrice(quotation.quoted_price, quotation.currency)}</CardTitle>
+          <CardTitle as="h1">Quotation — {formatPrice(quotation.quoted_price, quotation.currency)}</CardTitle>
           <p className="text-sm text-muted-foreground">{STATUS_LABELS[quotation.status] ?? quotation.status}</p>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">

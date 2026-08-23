@@ -23,7 +23,7 @@ export default async function ReferralsPage() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Referrals</CardTitle>
+        <CardTitle as="h1">Referrals</CardTitle>
         <CardDescription>
           Share a code with a friend — each code is single-use, so generate a new one for each person you invite.
         </CardDescription>

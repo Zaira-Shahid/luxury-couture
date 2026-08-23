@@ -14,7 +14,7 @@ export default async function ProfilePage() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Profile</CardTitle>
+        <CardTitle as="h1">Profile</CardTitle>
         <CardDescription>{user.email}</CardDescription>
       </CardHeader>
       <CardContent>

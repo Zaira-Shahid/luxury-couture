@@ -22,7 +22,7 @@ export default async function ContactPage() {
     <div className="container max-w-xl py-16">
       <Card>
         <CardHeader>
-          <CardTitle>Get in Touch</CardTitle>
+          <CardTitle as="h1">Get in Touch</CardTitle>
           <CardDescription>
             Questions about a piece, an order, or anything else — we&apos;re happy to help.
           </CardDescription>

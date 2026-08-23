@@ -24,7 +24,7 @@ export default async function MeasurementsPage() {
       <Card>
         <CardHeader className="flex-row items-center justify-between">
           <div>
-            <CardTitle>Measurement Profiles</CardTitle>
+            <CardTitle as="h1">Measurement Profiles</CardTitle>
             <CardDescription>
               Save your measurements for a perfect fit.{" "}
               <Link href="/account/measurements/guide" className="text-primary underline-offset-4 hover:underline">

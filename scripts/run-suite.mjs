@@ -12,7 +12,7 @@
 //
 // Requires a running production server, since most scripts hit HTTP.
 import { execFileSync } from "node:child_process";
-import { readFileSync, readdirSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 
 const args = process.argv.slice(2);
 
@@ -61,6 +61,8 @@ if (args[0] === "--diff") {
   process.exit(regressions === 0 ? 0 : 1);
 }
 
+const FAILURE_DIR = process.env.SUITE_FAILURE_DIR ?? ".suite-failures";
+
 const scripts = readdirSync("scripts")
   .filter((f) => f.startsWith("test-") && f.endsWith(".mjs"))
   .sort();
@@ -84,5 +86,21 @@ for (const script of scripts) {
   }
   const pass = (out.match(/^PASS —/gm) ?? []).length;
   const fail = (out.match(/^FAIL —/gm) ?? []).length;
+
+  // Keep the output of anything that failed. Without this the suite
+  // records only counts, so a script that drops from 28/0 to 27/1 tells
+  // you a regression exists but not which assertion moved — and if it
+  // turns out to be flaky, the evidence is already gone. Diagnosing one
+  // such flake by re-running scripts by hand is what motivated this.
+  if (fail > 0) {
+    try {
+      mkdirSync(FAILURE_DIR, { recursive: true });
+      writeFileSync(`${FAILURE_DIR}/${script}.txt`, out);
+      console.error(`  (output saved to ${FAILURE_DIR}/${script}.txt)`);
+    } catch {
+      // Never let bookkeeping break the run itself.
+    }
+  }
+
   console.log(`${script} | ${pass} | ${fail}`);
 }

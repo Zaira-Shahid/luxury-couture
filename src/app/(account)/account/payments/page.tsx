@@ -30,7 +30,7 @@ export default async function PaymentsPage() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Payments</CardTitle>
+        <CardTitle as="h1">Payments</CardTitle>
         <CardDescription>Your payment history and receipts.</CardDescription>
       </CardHeader>
       <CardContent>

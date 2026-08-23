@@ -101,7 +101,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     <div className="flex flex-col gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>{order.order_number}</CardTitle>
+          <CardTitle as="h1">{order.order_number}</CardTitle>
           <p className="text-sm text-muted-foreground">
             Placed {formatDate(order.created_at)} · {ORDER_STATUS_LABELS[order.status] ?? order.status}
           </p>
