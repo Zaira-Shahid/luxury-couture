@@ -1,9 +1,15 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
+import { ADMIN_ROLES } from "@/lib/auth/permissions";
 import { isReservedRootSlug } from "@/lib/routes/reserved-slugs";
 
-const STAFF_ROLES = new Set(["admin", "staff", "production"]);
+// Module 26: the coarse "may reach the admin shell at all" gate, now
+// covering every admin role rather than the original three. It is only a
+// gate on the shell -- which screens a role may actually use is decided
+// by the per-route permission checks and RLS underneath. permissions.ts
+// is import-free, so it is safe on the Edge runtime.
+const STAFF_ROLES = new Set<string>(ADMIN_ROLES);
 const CART_SESSION_COOKIE = "cart_session";
 const CART_SESSION_MAX_AGE = 60 * 60 * 24 * 90; // 90 days
 

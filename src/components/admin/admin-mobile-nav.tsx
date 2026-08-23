@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 
 import { AdminSidebarNav } from "./admin-sidebar";
 
-export function AdminMobileNav() {
+export function AdminMobileNav({ permissions }: { permissions: string[] }) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
@@ -26,7 +26,7 @@ export function AdminMobileNav() {
                 <X className="size-5" />
               </Button>
             </div>
-            <AdminSidebarNav onNavigate={() => setIsOpen(false)} />
+            <AdminSidebarNav onNavigate={() => setIsOpen(false)} permissions={permissions} />
           </div>
         </div>
       ) : null}

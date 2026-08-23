@@ -34,3 +34,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Module 26 verification artifacts (policy snapshots, suite baselines, server log)
+.m26/
