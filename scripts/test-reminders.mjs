@@ -54,7 +54,16 @@ async function makeCustomer(label) {
 }
 
 async function runCron() {
-  const res = await fetch(`${APP_URL}/api/cron/reminders`, { redirect: "manual" });
+  // MODULE 29: the cron now FAILS CLOSED — 401 for a bad token, 503 when
+  // no CRON_SECRET is configured at all. An unauthenticated call used to
+  // work and no longer does, which is the whole point of that change, so
+  // this sends the secret the way Vercel Cron does.
+  const res = await fetch(`${APP_URL}/api/cron/reminders`, {
+    headers: process.env.CRON_SECRET
+      ? { authorization: `Bearer ${process.env.CRON_SECRET}` }
+      : {},
+    redirect: "manual",
+  });
   return { status: res.status, body: await res.json().catch(() => null) };
 }
 

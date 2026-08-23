@@ -46,3 +46,6 @@ next-env.d.ts
 
 # Saved output of any suite script that failed
 .suite-failures/
+
+# Module 29 verification artifacts
+.m29/
