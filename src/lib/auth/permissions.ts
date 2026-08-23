@@ -56,8 +56,9 @@ export const ROLE_DESCRIPTIONS: Record<AppRole, string> = {
   super_admin: "Full access, including assigning roles and editing permissions.",
   admin: "Full access except role management.",
   sales: "Orders, quotations, enquiries and customer records. No access to payments.",
-  production: "The workshop: production status, shipping and inventory.",
-  qc: "Records quality-check outcomes and reads production. Changes nothing else.",
+  production:
+    "The workshop: production status, shipping and inventory. Sees only orders already handed to production.",
+  qc: "Records quality-check outcomes and reads production. No access to the order book.",
   finance: "Payments, refunds and reporting. Can read orders but not edit them.",
   support: "Enquiries, chat and customer records. Reads orders but cannot change them.",
   marketing: "Campaigns, content, reviews and analytics. No access to orders or payments.",
@@ -111,15 +112,21 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
     "enquiries.write",
     "catalog.read",
   ],
+  // NOT orders.read, for either of these. Module 13 (0034) deliberately
+  // scoped production staff to orders that have actually been handed to
+  // production — "not the full order book, not orders still in
+  // sales/negotiation" — through is_production_staff(), and a blanket
+  // orders.read would quietly undo that. 0055 removed it after
+  // test-production.mjs caught the over-grant. Measurements are reachable
+  // under production.read instead.
   production: [
     "production.read",
     "production.write",
     "shipping.write",
     "inventory.write",
-    "orders.read",
     "catalog.read",
   ],
-  qc: ["production.read", "qc.write", "orders.read"],
+  qc: ["production.read", "qc.write"],
   finance: ["payments.read", "payments.write", "payments.refund", "orders.read", "analytics.read"],
   support: ["enquiries.read", "enquiries.write", "customers.read", "orders.read"],
   marketing: [
@@ -141,4 +148,54 @@ export function roleHasPermission(role: string, permission: Permission): boolean
   if (role === "super_admin") return true;
   if (!isAdminRole(role)) return false;
   return DEFAULT_ROLE_PERMISSIONS[role].includes(permission);
+}
+
+/**
+ * Which permission each admin route needs.
+ *
+ * Deliberately ONE map, consumed by three places that would otherwise
+ * drift apart: the middleware route guard, the sidebar (which hides what
+ * a role cannot use), and any page that wants an explicit check of its
+ * own. A new admin screen is listed here once.
+ *
+ * Matched by prefix, longest first, so `/admin/orders/abc123` inherits
+ * `/admin/orders`. `/admin` itself is absent on purpose: the dashboard is
+ * the landing page every admin role is allowed, and it is also where a
+ * refused route redirects to — a rule requiring a permission for it could
+ * only produce a redirect loop.
+ */
+export const ADMIN_ROUTE_PERMISSIONS: { prefix: string; permission: Permission }[] = [
+  { prefix: "/admin/team", permission: "roles.manage" },
+  { prefix: "/admin/settings", permission: "settings.manage" },
+  { prefix: "/admin/orders", permission: "orders.read" },
+  { prefix: "/admin/customers", permission: "customers.read" },
+  { prefix: "/admin/quotations", permission: "quotations.read" },
+  { prefix: "/admin/payments", permission: "payments.read" },
+  { prefix: "/admin/enquiries", permission: "enquiries.read" },
+  { prefix: "/admin/appointments", permission: "enquiries.read" },
+  { prefix: "/admin/production", permission: "production.read" },
+  { prefix: "/admin/shipping", permission: "shipping.write" },
+  { prefix: "/admin/products", permission: "catalog.read" },
+  { prefix: "/admin/collections", permission: "catalog.read" },
+  { prefix: "/admin/categories", permission: "catalog.read" },
+  { prefix: "/admin/measurements", permission: "orders.read" },
+  { prefix: "/admin/media", permission: "catalog.read" },
+  { prefix: "/admin/builder", permission: "catalog.read" },
+  { prefix: "/admin/inventory", permission: "inventory.write" },
+  { prefix: "/admin/reviews", permission: "reviews.moderate" },
+  { prefix: "/admin/marketing", permission: "marketing.write" },
+  { prefix: "/admin/content", permission: "content.write" },
+  { prefix: "/admin/seo", permission: "content.write" },
+  { prefix: "/admin/analytics", permission: "analytics.read" },
+];
+
+/** The permission `pathname` requires, or null when any admin role may see it. */
+export function permissionForAdminPath(pathname: string): Permission | null {
+  let best: { prefix: string; permission: Permission } | null = null;
+  for (const rule of ADMIN_ROUTE_PERMISSIONS) {
+    if (pathname === rule.prefix || pathname.startsWith(rule.prefix + "/")) {
+      if (!best || rule.prefix.length > best.prefix.length) best = rule;
+    }
+  }
+  return best?.permission ?? null;
 }

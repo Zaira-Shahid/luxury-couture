@@ -140,11 +140,13 @@ Quick reference for how this codebase is organized. For the full product roadmap
 - Admin CRUD actions (`features/admin-catalog/actions.ts`) use the regular SSR client, not
   `lib/supabase/admin.ts` — the existing `is_admin()` RLS policies already grant exactly the
   needed access for a real authenticated admin, so bypassing RLS with the service-role client
-  would be an unnecessary privilege escalation, not a simplification. Note: the `(admin)` layout
-  gate allows `admin`/`staff`/`production` roles (see Module 2), but these RLS policies allow
-  writes for `role = 'admin'` only — a `staff`/`production` account could reach `/admin/products`
-  but would get a generic write failure on submit. Fine-grained per-role admin permissions are
-  explicitly Module 26 ("Admin Roles & Permissions") — not fixed here.
+  would be an unnecessary privilege escalation, not a simplification. **This note described a gap that Module 26 has since
+  closed.** It read: the `(admin)` layout gate allows `admin`/`staff`/`production` roles, but
+  these RLS policies allow writes for `role = 'admin'` only, so a `staff`/`production` account
+  could reach `/admin/products` and get a generic write failure on submit. As of Module 26 a
+  role reaches only the screens its permissions allow (`ADMIN_ROUTE_PERMISSIONS` plus the middleware
+  guard), and `0054` adds `catalog.write` policies alongside the `is_admin()` ones so the write
+  actually succeeds for a role that should have it. See `docs/PERMISSIONS.md`.
 - Repeatable form data (product images, a collection's linked products) uses two different
   patterns depending on shape: a *fixed* checklist (collection→product links) uses plain
   `<input name="productIds" value={id}>` checkboxes, read server-side with
@@ -1428,3 +1430,27 @@ Tailwind classes (`bg-primary`, `text-muted-foreground`, etc.), never raw color 
 `--primary`/`--accent` specifically can be overridden at runtime: the root layout sets them as
 inline styles on `<html>` from `getSiteSettings()` when an admin value exists, layering on top of
 (not replacing) the `:root` developer defaults — see the Settings section above.
+
+## Roles & permissions (Module 26)
+
+Nine roles, 23 permissions, one lookup function. `profiles.role` → `role_permissions` →
+`has_permission()`, consulted by RLS, the middleware route guard, `requirePermission()` in
+Server Actions, and the sidebar filter — in descending order of how much they matter. Only RLS
+is a boundary; the rest fail fast or tidy the UI.
+
+The design constraint that shaped this module: **151 existing RLS policies call `is_admin()`**,
+so `0054` adds policies and never edits one. PERMISSIVE policies are OR'd, so an addition cannot
+narrow anyone's access, and `scripts/snapshot-policies.mjs --diff` proves that mechanically
+(173 → 260 policies; 87 added, 0 removed, 0 changed) rather than on trust.
+
+Two things did change behaviour on purpose: `is_admin()` was widened to include `super_admin`,
+and role assignment was narrowed from "any admin" to `has_permission('roles.manage')` — so a
+plain `admin` can no longer change anyone's role. Existing admins were promoted to `super_admin`
+by `0053`.
+
+`src/lib/auth/permissions.ts` is import-free (Edge runtime + direct `.ts` import from the test
+script) and **mirrors** the seed rather than owning it; where the mirror and the database
+disagree, the database wins.
+
+Full detail, including the `SECURITY DEFINER`/`INVOKER` reasoning and the known limitations, is
+in `docs/PERMISSIONS.md`.

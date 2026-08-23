@@ -289,6 +289,220 @@ for (const table of ["orders", "payments", "products", "site_settings"]) {
 }
 
 // ---------------------------------------------------------------------
+console.log("\n# Pass 2 — real table access through RLS, not through has_permission()");
+
+// Everything above asks the permission function what it thinks. This
+// section asks the database what it actually allows, which is the only
+// answer that matters. Seeded with the service-role client so the setup
+// itself is never the thing under test.
+// Reuses the customer actor from above rather than creating another.
+const shopper = actors.customer;
+const { data: seedAddress } = await admin
+  .from("addresses")
+  .insert({
+    customer_id: shopper.id,
+    recipient_name: "Perm Test",
+    line1: "1 Test St",
+    city: "London",
+    postal_code: "E1 1AA",
+    country: "UK",
+  })
+  .select()
+  .single();
+const { data: seedOrder } = await admin
+  .from("orders")
+  .insert({
+    customer_id: shopper.id,
+    shipping_address_id: seedAddress.id,
+    status: "pending",
+    subtotal: 500,
+    total_amount: 500,
+    balance_due_amount: 500,
+  })
+  .select("id")
+  .single();
+const { data: seedPayment } = await admin
+  .from("payments")
+  .insert({ order_id: seedOrder.id, type: "deposit", amount: 100, status: "succeeded" })
+  .select("id")
+  .single();
+const { data: seedProduction } = await admin
+  .from("production_orders")
+  .insert({ order_id: seedOrder.id, current_status: "cutting" })
+  .select("id")
+  .single();
+const { data: seedEnquiry } = await admin
+  .from("enquiries")
+  .insert({
+    type: "general",
+    contact_name: "Perm Test",
+    contact_email: "perm-" + suffix + "@luxury-couture-devtest.local",
+    message: "Permission matrix test",
+    status: "new",
+  })
+  .select("id")
+  .single();
+
+// A read that RLS refuses returns zero rows rather than an error, so
+// every read assertion is on the ROW COUNT, never on `error`.
+async function reads(who, table, id) {
+  const { data } = await who.client.from(table).select("id").eq("id", id);
+  return (data?.length ?? 0) === 1;
+}
+
+// An update RLS refuses is also silent — the statement matches no rows.
+// `.select()` is what makes the difference visible.
+async function updates(who, table, id, patch) {
+  const { data, error } = await who.client.from(table).update(patch).eq("id", id).select("id");
+  return !error && (data?.length ?? 0) === 1;
+}
+
+console.log("\n## Each role can reach its own domain");
+check("sales reads the order", await reads(actors.sales, "orders", seedOrder.id));
+check("sales updates the order", await updates(actors.sales, "orders", seedOrder.id, { status: "confirmed" }));
+check("sales reads the enquiry", await reads(actors.sales, "enquiries", seedEnquiry.id));
+check("finance reads the payment", await reads(actors.finance, "payments", seedPayment.id));
+check("finance reads the order", await reads(actors.finance, "orders", seedOrder.id));
+check("production reads the production order", await reads(actors.production, "production_orders", seedProduction.id));
+check(
+  "production advances the production order",
+  await updates(actors.production, "production_orders", seedProduction.id, { current_status: "stitching" })
+);
+check("support reads the enquiry", await reads(actors.support, "enquiries", seedEnquiry.id));
+check(
+  "support updates the enquiry",
+  await updates(actors.support, "enquiries", seedEnquiry.id, { status: "in_review" })
+);
+check("qc reads the production order", await reads(actors.qc, "production_orders", seedProduction.id));
+
+const { data: qcEntry, error: qcErr } = await actors.qc.client
+  .from("production_status_history")
+  .insert({ production_order_id: seedProduction.id, status: "quality_check", note: "QC pass" })
+  .select("id");
+check("qc records a status-history entry", !qcErr && (qcEntry?.length ?? 0) === 1);
+
+const { data: campaign, error: campaignErr } = await actors.marketing.client
+  .from("campaigns")
+  .insert({ subject: "Perm test", body: "Body", target: "all_subscribers", status: "draft" })
+  .select("id");
+check("marketing creates a campaign", !campaignErr && (campaign?.length ?? 0) === 1);
+if (campaign?.[0]) await admin.from("campaigns").delete().eq("id", campaign[0].id);
+
+console.log("\n## And CANNOT reach anyone else's");
+check("sales cannot read the payment", !(await reads(actors.sales, "payments", seedPayment.id)));
+check(
+  "sales cannot advance production",
+  !(await updates(actors.sales, "production_orders", seedProduction.id, { current_status: "finishing" }))
+);
+check("marketing cannot read the order", !(await reads(actors.marketing, "orders", seedOrder.id)));
+check("marketing cannot read the payment", !(await reads(actors.marketing, "payments", seedPayment.id)));
+check("finance cannot update the order", !(await updates(actors.finance, "orders", seedOrder.id, { status: "cancelled" })));
+check("production cannot read the payment", !(await reads(actors.production, "payments", seedPayment.id)));
+check(
+  "support cannot advance production",
+  !(await updates(actors.support, "production_orders", seedProduction.id, { current_status: "finishing" }))
+);
+check(
+  "qc cannot advance production directly",
+  !(await updates(actors.qc, "production_orders", seedProduction.id, { current_status: "finishing" }))
+);
+
+const { data: financePage, error: financePageErr } = await actors.finance.client
+  .from("pages")
+  .insert({ slug: "perm-test-" + suffix, title: "Perm", content: "x", status: "draft" })
+  .select("id");
+check("finance cannot publish content", !!financePageErr || (financePage?.length ?? 0) === 0);
+if (financePage?.[0]) await admin.from("pages").delete().eq("id", financePage[0].id);
+
+const { data: salesCampaign, error: salesCampaignErr } = await actors.sales.client
+  .from("campaigns")
+  .insert({ subject: "No", body: "No", target: "all_subscribers", status: "draft" })
+  .select("id");
+check("sales cannot create a campaign", !!salesCampaignErr || (salesCampaign?.length ?? 0) === 0);
+if (salesCampaign?.[0]) await admin.from("campaigns").delete().eq("id", salesCampaign[0].id);
+
+const { data: marketingSettings, error: marketingSettingsErr } = await actors.marketing.client
+  .from("site_settings")
+  .upsert({ key: "store.name", value: "hijacked" })
+  .select("key");
+check(
+  "marketing cannot write site settings",
+  !!marketingSettingsErr || (marketingSettings?.length ?? 0) === 0
+);
+
+// audit_logs is deliberately left admin-only: a log the people it records
+// can read on the strength of a domain permission is worth less.
+const { data: salesAudit } = await actors.sales.client.from("audit_logs").select("id").limit(1);
+check("no domain permission opens audit_logs", (salesAudit?.length ?? 0) === 0);
+
+// profiles is granted SELECT only, so customers.read never becomes a
+// write path into the role column.
+const { error: supportProfileErr } = await actors.support.client
+  .from("profiles")
+  .update({ full_name: "Hijacked" })
+  .eq("id", shopper.id);
+const { data: shopperAfter } = await admin
+  .from("profiles")
+  .select("full_name")
+  .eq("id", shopper.id)
+  .single();
+check(
+  "customers.read does not grant profile writes",
+  !!supportProfileErr || shopperAfter?.full_name !== "Hijacked"
+);
+check("support CAN read the customer profile", await reads(actors.support, "profiles", shopper.id));
+check("production cannot read customer profiles", !(await reads(actors.production, "profiles", shopper.id)));
+
+// Module 13's boundary, re-asserted from this module's side.
+//
+// 0054 originally gave `production` a blanket orders.read, which quietly
+// undid 0034's rule that production staff see only orders handed to
+// production — "not the full order book, not orders still in
+// sales/negotiation". test-production.mjs caught it and 0055 removed the
+// permission. These checks exist so it cannot come back through a change
+// to the permission matrix rather than to a policy.
+const { data: unhandedOrder } = await admin
+  .from("orders")
+  .insert({
+    customer_id: shopper.id,
+    shipping_address_id: seedAddress.id,
+    status: "pending",
+    subtotal: 300,
+    total_amount: 300,
+    balance_due_amount: 300,
+  })
+  .select("id")
+  .single();
+
+check(
+  "production reads a HANDED-OFF order (0034's grant survives)",
+  await reads(actors.production, "orders", seedOrder.id)
+);
+check(
+  "production CANNOT read an order never sent to production",
+  !(await reads(actors.production, "orders", unhandedOrder.id))
+);
+check("qc cannot read the order book at all", !(await reads(actors.qc, "orders", seedOrder.id)));
+check(
+  "production can still read measurements (granted under production.read)",
+  !(await actors.production.client.from("measurement_profiles").select("id").limit(1)).error
+);
+
+await admin.from("orders").delete().eq("id", unhandedOrder.id);
+
+console.log("\n## The customer's own access is unchanged");
+check("the shopper still reads their own order", await reads(shopper, "orders", seedOrder.id));
+check(
+  "the shopper still cannot change their own order",
+  !(await updates(shopper, "orders", seedOrder.id, { status: "delivered" }))
+);
+
+// Clean up the seeded rows. Orders cascade to production/payments.
+await admin.from("enquiries").delete().eq("id", seedEnquiry.id);
+await admin.from("orders").delete().eq("id", seedOrder.id);
+await admin.from("addresses").delete().eq("id", seedAddress.id);
+
+// ---------------------------------------------------------------------
 console.log("\n# The admin shell, over HTTP with real session cookies");
 
 // Matches @supabase/ssr's cookie format, the same helper
@@ -367,6 +581,40 @@ check("a plain admin still sees Payments (no regression)", adminDash.html.includ
 check(
   "a plain admin does NOT see Team / Roles (roles.manage narrowed)",
   !adminDash.html.includes("Team &amp; Roles")
+);
+
+// The per-route guard. A 307 to /admin is the refusal; a 200 is access.
+// This is the layer that keeps a Sales account off /admin/payments rather
+// than merely hiding the menu entry from them.
+async function routeAllowed(cookie, path) {
+  const res = await fetch(APP_URL + path, { headers: { cookie }, redirect: "manual" });
+  if (res.status === 200) return true;
+  const location = res.headers.get("location") ?? "";
+  return !(res.status === 307 || res.status === 302) || !location.endsWith("/admin");
+}
+
+const financeCookie = await sessionFor(actors.finance);
+const marketingCookie = await sessionFor(actors.marketing);
+
+check("sales reaches /admin/orders", await routeAllowed(salesCookie, "/admin/orders"));
+check("sales is refused /admin/payments", !(await routeAllowed(salesCookie, "/admin/payments")));
+check("sales is refused /admin/production", !(await routeAllowed(salesCookie, "/admin/production")));
+check("sales is refused /admin/settings", !(await routeAllowed(salesCookie, "/admin/settings")));
+check("finance reaches /admin/payments", await routeAllowed(financeCookie, "/admin/payments"));
+check("finance is refused /admin/content", !(await routeAllowed(financeCookie, "/admin/content")));
+check("marketing reaches /admin/marketing", await routeAllowed(marketingCookie, "/admin/marketing"));
+check("marketing is refused /admin/orders", !(await routeAllowed(marketingCookie, "/admin/orders")));
+check("a plain admin still reaches /admin/payments", await routeAllowed(adminCookie, "/admin/payments"));
+check("a plain admin still reaches /admin/settings", await routeAllowed(adminCookie, "/admin/settings"));
+check("a plain admin is refused /admin/team", !(await routeAllowed(adminCookie, "/admin/team")));
+check("super_admin reaches /admin/team", await routeAllowed(superCookie, "/admin/team"));
+check("super_admin reaches /admin/payments", await routeAllowed(superCookie, "/admin/payments"));
+
+// Nested routes inherit their prefix rule, so a guard cannot be walked
+// around by going one level deeper.
+check(
+  "sales is refused a nested /admin/payments/... route",
+  !(await routeAllowed(salesCookie, "/admin/payments/anything"))
 );
 
 // ---------------------------------------------------------------------
