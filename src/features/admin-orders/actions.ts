@@ -57,7 +57,7 @@ export async function updateOrderStatus(orderId: string, formData: FormData): Pr
     parsed.data.status === "confirmed"
       ? orderConfirmedTemplate(order.order_number)
       : orderStatusChangedTemplate(order.order_number, parsed.data.status);
-  await notify(supabase, { profileId: order.customer_id, ...template });
+  await notify(supabase, { profileId: order.customer_id, entityId: orderId, ...template });
 
   revalidatePath(`/admin/orders/${orderId}`);
   revalidatePath(`/account/orders/${orderId}`);
@@ -99,6 +99,7 @@ export async function sendCustomerMessage(orderId: string, formData: FormData): 
 
   const { inAppSuccess } = await notify(supabase, {
     profileId: order.customer_id,
+    entityId: orderId,
     ...orderMessageTemplate(parsed.data.title, parsed.data.body),
   });
   if (!inAppSuccess) {
@@ -140,7 +141,11 @@ export async function sendToProduction(orderId: string, formData: FormData): Pro
 
   const { data: order } = await supabase.from("orders").select("customer_id, order_number").eq("id", orderId).single();
   if (order) {
-    await notify(supabase, { profileId: order.customer_id, ...productionStartedTemplate(order.order_number) });
+    await notify(supabase, {
+      profileId: order.customer_id,
+      entityId: orderId,
+      ...productionStartedTemplate(order.order_number),
+    });
   }
 
   revalidatePath(`/admin/orders/${orderId}`);

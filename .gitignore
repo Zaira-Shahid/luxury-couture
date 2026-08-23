@@ -37,3 +37,6 @@ next-env.d.ts
 
 # Module 26 verification artifacts (policy snapshots, suite baselines, server log)
 .m26/
+
+# Module 27 verification artifacts
+.m27/
