@@ -1764,7 +1764,35 @@ Support notification preferences.
 
 # MODULE 28 — PERFORMANCE, ACCESSIBILITY & RESPONSIVENESS
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
+
+Built in two passes, with three new checks that re-run on every suite pass:
+test-contrast.mjs (41/0), test-a11y.mjs (147/0), test-bundle-budget.mjs (13/0).
+
+LIGHTHOUSE WAS NOT RUN and no score is claimed — Chromium is not installed
+in this environment, and a localhost run would not transfer to production
+anyway. Everything on the audit list that can be decided deterministically
+is; field Core Web Vitals remain genuinely unverified and need a deploy.
+
+Pass 1 found five real contrast failures (the light focus ring at 2.37:1
+being the worst — the one affordance a keyboard user cannot do without),
+two layouts with no <main> landmark at all, seven pages shipping no <h1>,
+two hover-only buttons invisible while focused, and two overlays with no
+Escape, dialog semantics or focus return.
+
+Pass 2 removed framer-motion entirely — a 5.4 MB dependency used for a
+fade, a scroll reveal and a hero stagger, all of which are CSS. Home went
+173 -> 129 kB and /products/[slug] 180 -> 140 kB. The hero <h1> now
+animates transform only, because an element at opacity 0 has not painted
+and the old fade was pushing LCP out by its own duration on the site's
+most important route.
+
+Cross-request catalogue caching was deliberately NOT implemented; the
+reasoning is recorded in docs/PERFORMANCE-A11Y.md rather than left as an
+unexplained gap. A full focus trap in useDialog is a stated remaining gap.
+
+Verification: policies 262 -> 262, zero changes. All pre-existing scripts
+held to identical counts across both passes.
 
 Audit:
 
@@ -2823,12 +2851,12 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULE 27 COMPLETE`
+`MODULE 28 COMPLETE`
 
 Current Module:
 
-`MODULE 27 — COMPLETE`
+`MODULE 28 — COMPLETE`
 
 Next Action:
 
-`Start Module 28`
+`Start Module 29`
