@@ -17,6 +17,8 @@
 //   node --env-file=.env.local scripts/test-permissions.mjs
 import { createClient } from "@supabase/supabase-js";
 
+import { purgeDevtestData } from "./lib/purge-devtest.mjs";
+
 import {
   DEFAULT_ROLE_PERMISSIONS,
   PERMISSIONS,
@@ -83,6 +85,11 @@ const roles = [
   "support",
   "marketing",
 ];
+// Idempotent setup — see scripts/lib/purge-devtest.mjs. This script
+// creates nine accounts per run; a crash used to leave all nine behind.
+const purged = await purgeDevtestData(admin);
+if (purged > 0) console.log(`(purged ${purged} leaked dev-test account(s) from a previous run)`);
+
 const actors = {};
 for (const role of roles) actors[role] = await actor(role);
 

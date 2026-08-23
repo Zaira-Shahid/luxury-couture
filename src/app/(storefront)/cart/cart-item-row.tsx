@@ -5,6 +5,7 @@ import { useTransition } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { StorefrontImage } from "@/components/ui/storefront-image";
 import { removeCartItem, updateCartItemQuantity } from "@/features/cart/actions";
 import type { EnrichedCartItem } from "@/lib/cart/get-cart";
 
@@ -47,10 +48,23 @@ export function CartItemRow({
 
   return (
     <div className="flex items-center gap-4 border-b border-border py-4 last:border-0">
-      <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
+      {/*
+        MODULE 28: was a raw <img>. `relative` is required because
+        StorefrontImage uses next/image's `fill`.
+
+        `sizes` is the substantive part: without it next/image assumes
+        100vw and serves a full-width source for a 64px thumbnail, which
+        on a cart of six items is several megabytes to render a strip of
+        postage stamps.
+      */}
+      <div className="relative flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
         {item.product?.image_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={item.product.image_url} alt={name} className="size-full object-cover" />
+          <StorefrontImage
+            src={item.product.image_url}
+            alt={name}
+            sizes="64px"
+            className="object-cover"
+          />
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         )}

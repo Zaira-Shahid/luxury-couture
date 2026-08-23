@@ -77,9 +77,18 @@ export function ReviewForm({
           <Label className="mb-2">Add photos (optional)</Label>
           {photos.length > 0 ? (
             <div className="mb-2 grid grid-cols-4 gap-2">
-              {photos.map((url) => (
+              {photos.map((url, index) => (
+                // MODULE 28: alt was "". The customer chose these photos
+                // and needs to be able to tell them apart.
                 // eslint-disable-next-line @next/next/no-img-element
-                <img key={url} src={url} alt="" className="aspect-square rounded-lg object-cover" />
+                <img
+                  key={url}
+                  src={url}
+                  alt={`Photo ${index + 1} of your review`}
+                  loading="lazy"
+                  decoding="async"
+                  className="aspect-square rounded-lg object-cover"
+                />
               ))}
             </div>
           ) : null}

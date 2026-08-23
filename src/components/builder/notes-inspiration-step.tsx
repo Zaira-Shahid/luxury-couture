@@ -129,15 +129,34 @@ export function NotesInspirationStep({
 
         {images.length > 0 ? (
           <div className="mt-3 grid grid-cols-3 gap-3 sm:grid-cols-4">
-            {images.map((image) => (
+            {images.map((image, index) => (
               <div key={image.id} className="group relative aspect-square overflow-hidden rounded-lg bg-muted">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={image.url} alt="" className="size-full object-cover" />
+                {/*
+                  MODULE 28: alt was "". These are the customer's OWN
+                  uploads sitting next to a remove button, so a screen
+                  reader announcing nothing left no way to tell which
+                  image was about to be deleted. Decorative is the wrong
+                  call whenever an image is the subject of a control.
+                  eslint-disable-next-line @next/next/no-img-element
+                */}
+                <img
+                  src={image.url}
+                  alt={`Inspiration image ${index + 1}`}
+                  loading="lazy"
+                  decoding="async"
+                  className="size-full object-cover"
+                />
                 <button
                   type="button"
                   disabled={isRemoving}
                   onClick={() => handleRemove(image.id)}
-                  className="absolute top-1 right-1 rounded-md bg-background/80 p-1 opacity-0 transition-opacity group-hover:opacity-100"
+                  aria-label={`Remove inspiration image ${index + 1}`}
+                  // MODULE 28: `opacity-0` + `group-hover:opacity-100`
+                  // alone made this button INVISIBLE to a keyboard user
+                  // even while focused — a WCAG 2.4.7 failure, not a
+                  // styling nicety. group-focus-within reveals it when
+                  // focus lands anywhere in the tile.
+                  className="absolute top-1 right-1 rounded-md bg-background/80 p-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
                   aria-label="Remove image"
                 >
                   <Trash2 className="size-3.5" />
