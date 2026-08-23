@@ -1,26 +1,30 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 /**
- * A light fade-in on route change, not a full AnimatePresence exit/enter
- * system — this module's own requirement is to "remain performant," and a
- * heavier transition system would fight Next's streaming/prefetch model
- * more than it's worth for this brand.
+ * A light fade-in on route change.
+ *
+ * MODULE 28: was framer-motion. This component sits in the storefront
+ * LAYOUT, so it put a 5.4 MB dependency into every customer-facing
+ * route's bundle in order to animate opacity from 0 to 1 over 300ms —
+ * which is one CSS keyframe.
+ *
+ * `key={pathname}` is what makes it work: React unmounts and remounts the
+ * subtree on navigation, so the CSS animation restarts. Same mechanism
+ * framer-motion was using, without the library.
+ *
+ * It now also honours prefers-reduced-motion for free, because the global
+ * override in globals.css applies to CSS animations. framer-motion's
+ * JS-driven transforms did not.
  */
 export function PageTransition({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   return (
-    <motion.div
-      key={pathname}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.3, ease: "easeOut" }}
-    >
+    <div key={pathname} className="animate-page-in">
       {children}
-    </motion.div>
+    </div>
   );
 }
