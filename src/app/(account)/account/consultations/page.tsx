@@ -30,7 +30,7 @@ export default async function ConsultationsPage() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Consultations</CardTitle>
+        <CardTitle as="h1">Consultations</CardTitle>
         <CardDescription>
           Your styling appointments and enquiries.{" "}
           <Link href="/consultations" className="text-primary underline-offset-4 hover:underline">

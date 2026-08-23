@@ -87,7 +87,11 @@ export function MediaLibrary({ initialMedia }: { initialMedia: Media[] }) {
                 <button
                   type="button"
                   onClick={() => handleDelete(item.id)}
-                  className="absolute top-1 right-1 rounded-md bg-background/80 p-1 opacity-0 transition-opacity group-hover:opacity-100"
+                  // MODULE 28: same defect as the builder inspiration
+                  // step — `opacity-0` with only a hover reveal left this
+                  // button invisible while focused, so a keyboard user
+                  // could not see what they were about to delete.
+                  className="absolute top-1 right-1 rounded-md bg-background/80 p-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
                   aria-label="Delete"
                 >
                   <Trash2 className="size-3.5" />

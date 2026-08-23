@@ -35,7 +35,7 @@ export default async function QuotationsPage() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Quotations</CardTitle>
+        <CardTitle as="h1">Quotations</CardTitle>
         <CardDescription>Custom quotes from our design team, ready for your approval.</CardDescription>
       </CardHeader>
       <CardContent>

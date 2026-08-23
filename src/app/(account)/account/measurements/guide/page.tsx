@@ -24,7 +24,7 @@ export default async function MeasurementGuidePage() {
       {groups.map((group) => (
         <Card key={group.category}>
           <CardHeader>
-            <CardTitle className="text-base">{group.category}</CardTitle>
+            <CardTitle as="h1" className="text-base">{group.category}</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-6 sm:grid-cols-2">
             {group.items.map((field) => (

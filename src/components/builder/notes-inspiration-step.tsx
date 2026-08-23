@@ -137,8 +137,12 @@ export function NotesInspirationStep({
                   reader announcing nothing left no way to tell which
                   image was about to be deleted. Decorative is the wrong
                   call whenever an image is the subject of a control.
-                  eslint-disable-next-line @next/next/no-img-element
+
+                  Stays a plain <img>: these are freshly uploaded URLs
+                  rendered in a form preview, not catalogue content, and
+                  next/image would buy nothing here.
                 */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={image.url}
                   alt={`Inspiration image ${index + 1}`}
@@ -157,7 +161,6 @@ export function NotesInspirationStep({
                   // styling nicety. group-focus-within reveals it when
                   // focus lands anywhere in the tile.
                   className="absolute top-1 right-1 rounded-md bg-background/80 p-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
-                  aria-label="Remove image"
                 >
                   <Trash2 className="size-3.5" />
                 </button>

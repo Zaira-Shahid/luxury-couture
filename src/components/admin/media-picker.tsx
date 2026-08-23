@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { useDialog } from "@/components/ui/use-dialog";
 import { uploadMedia } from "@/features/media/actions";
 import { compressImage } from "@/lib/storage/compress-image";
 import { MAX_MEDIA_BYTES, validateImageFile } from "@/lib/storage/validate-file";
@@ -24,6 +25,8 @@ export function MediaPicker({
   onPick: (url: string, altText: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  // MODULE 28: Escape-to-close, dialog semantics and focus return.
+  const { dialogRef, dialogProps } = useDialog({ isOpen, onClose: () => setIsOpen(false) });
   const [media, setMedia] = useState(initialMedia);
   const [isUploading, startUploading] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -60,8 +63,17 @@ export function MediaPicker({
 
       {isOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-foreground/20" onClick={() => setIsOpen(false)} />
-          <div className="relative flex max-h-[80vh] w-full max-w-2xl flex-col gap-4 overflow-y-auto rounded-xl bg-background p-4 ring-1 ring-foreground/10">
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 bg-foreground/20"
+            onClick={() => setIsOpen(false)}
+          />
+          <div
+            ref={dialogRef}
+            {...dialogProps}
+            aria-label="Media library"
+            className="relative flex max-h-[80vh] w-full max-w-2xl flex-col gap-4 overflow-y-auto rounded-xl bg-background p-4 ring-1 ring-foreground/10 outline-none"
+          >
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium">Media Library</p>
               <Button type="button" variant="ghost" size="sm" onClick={() => setIsOpen(false)}>

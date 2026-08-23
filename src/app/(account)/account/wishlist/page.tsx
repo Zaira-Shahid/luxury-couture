@@ -18,7 +18,7 @@ export default async function WishlistPage() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Wishlist</CardTitle>
+        <CardTitle as="h1">Wishlist</CardTitle>
         <CardDescription>Pieces you&apos;ve saved for later.</CardDescription>
       </CardHeader>
       <CardContent>
