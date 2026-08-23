@@ -7,10 +7,22 @@ import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { bookConsultationSchema } from "@/lib/validations/consultations";
+import { checkRateLimit } from "@/lib/security/rate-limit";
 
 export type ActionResult = { error: string } | { success: true };
 
 export async function bookConsultation(formData: FormData): Promise<ActionResult> {
+  // MODULE 29: this endpoint is anonymous, writes a row and sends
+  // mail. Unlimited, a trivial loop meant unbounded rows plus
+  // outbound email from this domain — a deliverability problem as
+  // much as a database one. Checked BEFORE any work is done.
+  const limited = await checkRateLimit(
+    "consultation",
+    5,
+    "You have requested several appointments recently. Please wait a few minutes before booking another."
+  );
+  if (!limited.allowed) return { error: limited.message };
+
   const parsed = bookConsultationSchema.safeParse({
     consultationTypeId: formData.get("consultationTypeId"),
     scheduledAt: formData.get("scheduledAt"),

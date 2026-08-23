@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { getAuthUser } from "@/lib/auth/session";
 import { logger } from "@/lib/logger";
+import { logAudit } from "@/lib/security/audit";
 import { notify } from "@/lib/notifications/notify";
 import { orderConfirmedTemplate, orderMessageTemplate, orderStatusChangedTemplate, productionStartedTemplate } from "@/lib/notifications/templates";
 import { createClient } from "@/lib/supabase/server";
@@ -34,7 +35,7 @@ export async function updateOrderStatus(orderId: string, formData: FormData): Pr
   const user = await getAuthUser();
   if (!user) return { error: "You must be signed in." };
 
-  const { data: order } = await supabase.from("orders").select("customer_id, order_number").eq("id", orderId).single();
+  const { data: order } = await supabase.from("orders").select("customer_id, order_number, status").eq("id", orderId).single();
   if (!order) return { error: "Order not found." };
 
   const { error: updateErr } = await supabase
@@ -45,6 +46,14 @@ export async function updateOrderStatus(orderId: string, formData: FormData): Pr
     logger.error("order status update failed", updateErr, { orderId });
     return { error: "Could not update this order. Please try again." };
   }
+
+  await logAudit({
+    action: "order.status_changed",
+    entityType: "order",
+    entityId: orderId,
+    before: { status: order.status },
+    after: { status: parsed.data.status },
+  });
 
   await supabase.from("order_status_history").insert({
     order_id: orderId,

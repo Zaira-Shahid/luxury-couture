@@ -4,6 +4,7 @@ import { emailUrl } from "@/lib/email";
 import { sendEmail } from "@/lib/email/send";
 import { abandonedCartEmail } from "@/lib/email/templates";
 import { logger } from "@/lib/logger";
+import { authorizeCron } from "@/lib/security/cron-auth";
 import { siteConfig } from "@/lib/config/site";
 import { abandonedCartTemplate } from "@/lib/notifications/templates";
 import { notify } from "@/lib/notifications/notify";
@@ -26,13 +27,11 @@ const ABANDON_AFTER_HOURS = 24;
  * isStripeConfigured()), but this MUST be set before any real deploy.
  */
 export async function GET(request: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const authHeader = request.headers.get("authorization");
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-  }
+  // MODULE 29: fails CLOSED in production. This used to skip the
+  // check entirely when CRON_SECRET was unset, which made the route
+  // publicly callable. See lib/security/cron-auth.ts.
+  const unauthorized = authorizeCron(request);
+  if (unauthorized) return unauthorized;
 
   const admin = createAdminClient();
   const { data: abandoned, error } = await admin.rpc("find_and_mark_abandoned_carts", {

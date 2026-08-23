@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getProfile, requirePermission } from "@/lib/auth/session";
 import { isAdminRole, PERMISSIONS, type AppRole, type Permission } from "@/lib/auth/permissions";
 import { logger } from "@/lib/logger";
+import { logAudit } from "@/lib/security/audit";
 import { createClient } from "@/lib/supabase/server";
 
 export type ActionResult = { error: string } | { success: true };
@@ -62,6 +63,14 @@ export async function assignRole(userId: string, role: string): Promise<ActionRe
     logger.error("assignRole failed", { userId, role, message: error.message });
     return { error: "Could not change that role." };
   }
+
+  await logAudit({
+    action: "role.assigned",
+    entityType: "profile",
+    entityId: userId,
+    after: { role },
+    actorId: profile.id,
+  });
 
   revalidatePath("/admin/team");
   return { success: true };

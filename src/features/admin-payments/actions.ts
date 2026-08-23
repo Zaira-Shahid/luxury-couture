@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { logger } from "@/lib/logger";
+import { logAudit } from "@/lib/security/audit";
 import { pointsEarnedForPayment } from "@/lib/loyalty/config";
 import { notify } from "@/lib/notifications/notify";
 import { balanceDueTemplate, depositPaidTemplate } from "@/lib/notifications/templates";
@@ -73,6 +74,15 @@ export async function refundPayment(paymentId: string): Promise<ActionResult> {
     logger.error("refund status update failed", error, { paymentId });
     return { error: "Refund may have processed, but the record could not be updated — please check manually." };
   }
+
+  // MODULE 29: money moving is the canonical audit event.
+  await logAudit({
+    action: "payment.refunded",
+    entityType: "payment",
+    entityId: paymentId,
+    before: { status: payment.status, amount: payment.amount },
+    after: { status: "refunded" },
+  });
 
   revalidatePath("/admin/payments");
   return { success: true };
