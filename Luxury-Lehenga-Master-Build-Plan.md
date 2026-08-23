@@ -1865,7 +1865,37 @@ Perform security review:
 
 # MODULE 30 — TESTING & QUALITY ASSURANCE
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
+
+Suite: 40 scripts, 1353 pass / 0 fail. No test framework added — unit
+tests use Node's built-in node:test, so devDependencies are unchanged.
+Component tests and Playwright were deliberately skipped, decided with the
+owner and recorded in docs/TESTING.md rather than left as silent gaps.
+
+scripts/test-flows-coverage.mjs names, per critical flow, a SPECIFIC
+script and SPECIFIC assertion strings. Keyword-grepping was worse than
+useless here: "order" appears in 25 scripts almost entirely incidentally,
+so a naive matrix reports near-total coverage regardless of reality.
+
+It found two genuine gaps and one of its own errors. REGISTRATION was
+never tested — zero of the 34 scripts called signUp(), because Supabase's
+public signUp rejects the .local test domain that admin.createUser
+accepts, which is very likely why the path went untested for 29 modules.
+PRODUCT BROWSING was covered only incidentally. And DEPOSIT was pointed at
+test-payments.mjs, which only ever uses type: "full" — the deposit rules
+actually live in test-settings-pass2.mjs.
+
+Also found: the storefront product listing has NO pagination and no
+user-controlled sort. Reported by test-browsing.mjs rather than tested,
+because testing a feature that does not exist is how a coverage matrix
+starts lying.
+
+Registration's signUp assertions record SKIP when Supabase's ~2/hour mail
+limit is hit — not a pass and not a failure. Resolves when custom SMTP is
+configured, already a standing launch blocker.
+
+Verification: policies 262 -> 262 zero changes; all 36 pre-existing
+scripts held to identical counts.
 
 Implement testing strategy.
 
@@ -2876,12 +2906,12 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULE 29 COMPLETE`
+`MODULE 30 COMPLETE`
 
 Current Module:
 
-`MODULE 29 — COMPLETE`
+`MODULE 30 — COMPLETE`
 
 Next Action:
 
-`Start Module 30`
+`Start Module 31`
