@@ -11,6 +11,8 @@
 // Needs a running production server for the render section.
 import { createClient } from "@supabase/supabase-js";
 
+import { purgeDevtestData } from "./lib/purge-devtest.mjs";
+
 import {
   NOTIFICATION_CATEGORIES,
   TYPE_CATEGORIES,
@@ -58,6 +60,10 @@ async function signIn(label) {
   created.push(data.user.id);
   return { client, id: data.user.id, email, session: session.session };
 }
+
+// Idempotent setup — see scripts/lib/purge-devtest.mjs.
+const purged = await purgeDevtestData(admin);
+if (purged > 0) console.log(`(purged ${purged} leaked dev-test account(s) from a previous run)`);
 
 const alice = await signIn("alice");
 const bob = await signIn("bob");

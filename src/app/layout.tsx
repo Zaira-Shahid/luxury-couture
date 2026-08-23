@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Toaster } from "sonner";
 
 import { siteConfig } from "@/lib/config/site";
@@ -8,6 +8,20 @@ import { getSiteSettings } from "@/lib/settings/get-site-settings";
 import { cn } from "@/lib/utils";
 
 import "./globals.css";
+
+/**
+ * MODULE 28. Split from generateMetadata because Next 15 requires
+ * viewport as its own export.
+ *
+ * `maximumScale` and `userScalable` are deliberately NOT set: capping
+ * zoom is a common "polish" tweak that breaks WCAG 1.4.4 outright for
+ * anyone who needs to magnify text. The default (unrestricted zoom) is
+ * the accessible one.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await getSiteSettings();
@@ -81,6 +95,15 @@ export default async function RootLayout({
       style={themeStyle as React.CSSProperties}
     >
       <body className="antialiased">
+        {/*
+          Skip link. First focusable element on every page, so a keyboard
+          or screen-reader user can jump past the header nav instead of
+          tabbing through it on each navigation. Targets #main-content,
+          which each layout's <main> carries.
+        */}
+        <a href="#main-content" className="skip-link">
+          Skip to content
+        </a>
         {children}
         <Toaster richColors position="top-center" />
       </body>
