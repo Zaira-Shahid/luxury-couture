@@ -216,10 +216,34 @@ check(
   !pdp.html.includes(`href="/products/${source.slug}"`)
 );
 
-console.log("\n=== RECOMMENDATIONS: behavioural tier outranks catalog ===");
-// Seed co-views: sessions that saw `source` also saw `coViewed`. It is
-// far outside the price band, so if it now ranks it can only be because
-// the affinity tier ran.
+console.log("\n=== RECOMMENDATIONS: affinity data never resurrects a draft ===");
+//
+// CORRECTED IN MODULE 31. This block used to assert "co-viewed product
+// now appears", claiming to prove the behavioural tier outranks the
+// catalog tiers. It was passing for the WRONG REASON, and the demo data
+// exposed it.
+//
+// getCoViewAffinity() reads analytics_events through the RLS client, and
+// an anonymous visitor cannot read that table — established directly
+// below rather than assumed. So on the storefront the behavioural tier
+// ALWAYS returns nothing and the chain degrades to the catalog tiers.
+// recommendations.ts documents exactly this and calls it "the correct
+// and safe behaviour"; the test was the thing overclaiming.
+//
+// It passed because the catalog fallback had almost nothing to choose
+// from in a near-empty shop, so the co-viewed product came back as
+// filler. With twelve demo products competing it no longer places.
+//
+// What is asserted now is what actually holds, and it is the half that
+// carries real risk: affinity data must never resurrect a draft.
+const anonProbe = createClient(url, anonKey, { auth: { persistSession: false } });
+const { data: anonAnalytics } = await anonProbe
+  .from("analytics_events")
+  .select("session_id")
+  .eq("event_name", "product_view")
+  .limit(1);
+const anonCanReadAnalytics = (anonAnalytics?.length ?? 0) > 0;
+
 const coViewRows = [];
 for (let i = 0; i < 6; i += 1) {
   const session = `m22-sess-${suffix}-${i}`;
@@ -229,7 +253,11 @@ for (let i = 0; i < 6; i += 1) {
 await admin.from("analytics_events").insert(coViewRows);
 
 const pdpAfter = await get(`/products/${source.slug}`);
-check("co-viewed product now appears", pdpAfter.html.includes(coViewed.name));
+check(
+  "the storefront cannot read analytics, so the behavioural tier stays inert",
+  !anonCanReadAnalytics,
+  "documented in recommendations.ts — see the note above"
+);
 check("draft still never appears even with affinity data", !pdpAfter.html.includes(draft.name));
 
 // Affinity for a draft product must not resurrect it.
