@@ -52,3 +52,6 @@ next-env.d.ts
 
 # Module 30 verification artifacts
 .m30/
+
+# Module 31 verification artifacts
+.m31/

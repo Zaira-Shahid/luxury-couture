@@ -95,15 +95,26 @@ if (registerSchema) {
 // ---------------------------------------------------------------------
 console.log("\n# A real signUp() creates an account and a profile");
 
-// NOT the usual @luxury-couture-devtest.local domain. Supabase's public
-// signUp validates the address and rejects a .local TLD outright, while
-// auth.admin.createUser accepts it — which is very likely WHY all 30
-// other scripts use the admin API and why this path went untested.
-// `.example` is reserved by RFC 2606 and can never route to a real
-// inbox, so it is safe to sign up with.
+// WHY THIS PATH CANNOT BE FULLY TESTED HERE, established by probing
+// rather than assumed:
 //
-// Cleanup is explicit at the end rather than via purgeDevtestData, which
-// filters on the .local domain and will not match these.
+//   @luxury-couture-devtest.local  -> "Email address is invalid"
+//   @devtest.example (RFC 2606)    -> "Email address is invalid"
+//   @luxury-couture-devtest.com    -> "Email address is invalid"
+//
+// Supabase Auth validates that the address's domain actually resolves,
+// so NO synthetic address passes. That is the real reason all 30 other
+// scripts use auth.admin.createUser, which skips the check — not merely
+// the mail rate limit, which is what an earlier version of this comment
+// claimed. The rate limit had masked the validation error underneath it.
+//
+// Testing signUp end-to-end therefore needs a real mailbox, which does
+// not belong in an automated suite: it would send genuine mail on every
+// run and create accounts on a live address.
+//
+// So the assertion is SKIPPED with the reason stated, and what CAN be
+// proven is proven — see the handle_new_user section below, which
+// exercises the trigger through a route that does pass validation.
 const email = `m30-signup-${suffix}@devtest.example`;
 const password = `m30-signup-${suffix}`;
 const anon = createClient(url, anonKey, {
@@ -116,15 +127,16 @@ const { data: signUpData, error: signUpError } = await anon.auth.signUp({
   options: { data: { full_name: "Module Thirty" } },
 });
 
-if (signUpError && /rate limit|too many/i.test(signUpError.message)) {
-  // Only a RATE LIMIT is skippable, and it is a SKIP rather than a pass
-  // or a failure: the shared mail allowance is an environment condition,
-  // and reporting it as either would be dishonest in opposite
-  // directions. An "invalid email" or any other rejection IS a genuine
-  // failure of this flow and must not be filed under "the environment
-  // was busy".
-  skip("signUp creates an account", `Supabase mail rate limit: ${signUpError.message}`);
-  skip("handle_new_user creates the profile", "signUp did not run");
+const signUpBlockedByEnvironment =
+  signUpError && /rate limit|too many|is invalid/i.test(signUpError.message);
+
+if (signUpBlockedByEnvironment) {
+  // A SKIP, not a pass and not a failure. Reporting an environment
+  // constraint as either would be dishonest in opposite directions —
+  // a pass would claim coverage that does not exist, and a failure would
+  // blame the application for Supabase's domain validation.
+  skip("signUp creates an account", `blocked by Supabase: ${signUpError.message}`);
+  skip("the signUp path returns a session or a confirmation gate", "signUp did not run");
 } else {
   check("signUp succeeds", !signUpError, signUpError?.message);
 
@@ -162,6 +174,51 @@ if (signUpError && /rate limit|too many/i.test(signUpError.message)) {
 }
 
 // ---------------------------------------------------------------------
+console.log("\n# handle_new_user, exercised through a route that validates");
+//
+// The trigger fires on the auth.users INSERT, so it can be proven
+// without the public signUp call that Supabase's domain validation
+// blocks. This is genuine coverage of the trigger itself — what it does
+// NOT cover is the signUp wrapper around it, and that distinction is the
+// point of keeping the two sections apart rather than quietly folding
+// this in and calling registration tested.
+
+const triggerEmail = `m30-trigger-${suffix}@luxury-couture-devtest.local`;
+const { data: triggerUser, error: triggerError } = await admin.auth.admin.createUser({
+  email: triggerEmail,
+  password: `m30-trigger-${suffix}`,
+  email_confirm: true,
+  user_metadata: { full_name: "Trigger Test" },
+});
+check("an account can be created", !triggerError, triggerError?.message);
+
+if (triggerUser?.user?.id) {
+  created.push(triggerUser.user.id);
+  await new Promise((r) => setTimeout(r, 600));
+
+  const { data: triggerProfile } = await admin
+    .from("profiles")
+    .select("id, role, full_name, marketing_unsubscribe_token")
+    .eq("id", triggerUser.user.id)
+    .maybeSingle();
+
+  check("handle_new_user created the profile row", !!triggerProfile);
+  check("the new account defaults to the customer role", triggerProfile?.role === "customer");
+  check(
+    "user_metadata.full_name reaches the profile",
+    triggerProfile?.full_name === "Trigger Test",
+    `got ${JSON.stringify(triggerProfile?.full_name)}`
+  );
+  // Module 24 gives every profile an unsubscribe token at creation. If
+  // the trigger stopped setting it, marketing unsubscribe links would
+  // silently stop working for every new customer.
+  check(
+    "the profile gets a marketing unsubscribe token",
+    !!triggerProfile?.marketing_unsubscribe_token
+  );
+}
+
+// ---------------------------------------------------------------------
 console.log("\n# A duplicate signup does not reveal that the account exists");
 //
 // Account enumeration: the response to "register with an address that
@@ -191,15 +248,25 @@ if (created.length > 0) {
 // ---------------------------------------------------------------------
 console.log("\n# Confirmation gate");
 
-// The project's own documented state: Supabase is configured to require
-// email confirmation, so a fresh signUp yields a user without a session.
-// Asserting the SHAPE rather than the delivery keeps this independent of
-// the mail sender.
-if (created.length > 0) {
+// Supabase is configured to require email confirmation, so a fresh
+// signUp should yield a user WITHOUT a session.
+//
+// Guarded on signUp having actually run, not merely on some account
+// existing. An earlier version keyed this off `created.length > 0`, and
+// once the trigger section started adding accounts it began passing
+// vacuously — `signUpData.session` is undefined when signUp ERRORED,
+// which is not evidence that the confirmation gate works. A check that
+// passes because the thing it tests never ran is worse than no check.
+if (!signUpBlockedByEnvironment && signUpData?.user) {
   check(
     "a fresh signup does not hand out a session before confirmation",
-    !signUpData?.session,
-    signUpData?.session ? "a session was returned" : "no session, as expected"
+    !signUpData.session,
+    signUpData.session ? "a session was returned" : "no session, as expected"
+  );
+} else {
+  skip(
+    "a fresh signup does not hand out a session before confirmation",
+    "signUp did not run, so there is nothing to observe"
   );
 }
 

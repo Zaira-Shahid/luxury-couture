@@ -1929,7 +1929,47 @@ Critical flows:
 
 # MODULE 31 — SEED DATA & DEMO STORE
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
+
+scripts/seed-demo.mjs with --seed / --status / --clear. 12 products, 4
+collections, 8 testimonials (with the demo customer accounts reviews
+requires), 4 blog posts, 4 CMS pages, 6 gallery images and a generated
+image for each — 59 tracked rows.
+
+A SCRIPT, NOT A MIGRATION. Every other seed here is a migration, which is
+right for reference data, but demo products must be removable before
+launch and a migration that inserts them is either permanent or needs a
+second migration to undo.
+
+--clear IS SAFE because everything created is recorded in demo_seed_items
+(0060), so a real product has no manifest entry and is never a candidate
+for deletion at all. test-seed-demo.mjs asserts this directly: it plants a
+hand-made product, page and account alongside the demo data, runs --clear,
+and checks all three survive.
+
+IMAGES ARE GENERATED LOCALLY and had to be. Module 28 restricted
+next/image to the Supabase host and Module 29's CSP restricted img-src to
+the same, so an Unsplash or picsum URL would break the storefront twice
+over. scripts/lib/placeholder-image.mjs writes PNGs with no dependencies
+(zlib plus CRC framing), deterministic per slug, in the brand palette.
+Not SVG: validate-file.ts rejects it as a stored-XSS vector and next/image
+will not optimise it. This also settles the plan's copyright rule outright
+— nothing is derived from anyone's work.
+
+/privacy NOW EXISTS, closing half a launch blocker open since Module 21:
+the cookie banner and chat widget have linked to it all along. THE LEGAL
+TEXT IS A DRAFT and says so on its face; it names the data this app
+actually collects, but it needs a solicitor before launch. The blocker
+moves from "the link 404s" to "the policy needs review" — progress, not
+completion.
+
+A REAL FINDING, exposed by the demo data: test-ai.mjs's "co-viewed product
+now appears" was passing for the wrong reason. getCoViewAffinity reads
+analytics_events through the RLS client and an anonymous visitor cannot
+read that table, so the behavioural recommendation tier NEVER runs on the
+storefront — recommendations.ts documents this and calls it correct. The
+assertion only passed because the catalog fallback had nothing else to
+return in a near-empty shop. Corrected to assert what actually holds.
 
 Create professional demo data.
 
@@ -2906,12 +2946,12 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULE 30 COMPLETE`
+`MODULE 31 COMPLETE`
 
 Current Module:
 
-`MODULE 30 — COMPLETE`
+`MODULE 31 — COMPLETE`
 
 Next Action:
 
-`Start Module 31`
+`Start Module 32`
