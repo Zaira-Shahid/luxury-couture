@@ -44,22 +44,35 @@ But it bypasses the zod validation, the public `signUp()` call, the confirmation
 redemption. **The one flow every customer must pass through was the one flow never exercised as a
 customer.**
 
-Two things had to change to test it at all:
+**And it turns out it cannot be fully tested here at all.** Probing established why:
 
-1. **The test domain.** Supabase's public `signUp` validates the address and rejects a `.local`
-   TLD outright, while `admin.createUser` accepts it — very likely *why* this path went untested.
-   `test-registration.mjs` uses `@devtest.example`; `.example` is reserved by RFC 2606 and can
-   never route to a real inbox.
-2. **Cleanup is explicit**, because `purgeDevtestData` filters on the `.local` domain and will not
-   match these accounts.
+| Domain | Result |
+| --- | --- |
+| `@luxury-couture-devtest.local` | "Email address is invalid" |
+| `@devtest.example` (RFC 2606) | "Email address is invalid" |
+| `@luxury-couture-devtest.com` | "Email address is invalid" |
 
-**Still not covered, and stated rather than implied:** Supabase's built-in SMTP allows roughly two
-messages an hour, shared with password reset. When that limit is hit, the signUp assertions record
-**SKIP** — not a pass, and not a failure. Reporting an environment condition as either would be
-dishonest in opposite directions. Email delivery itself is never asserted.
+Supabase Auth validates that the address's domain actually resolves, so **no synthetic address
+passes**. `admin.createUser` skips that check — which is the real reason the other 30 scripts use
+it, not merely the mail rate limit. An earlier version of this document blamed the rate limit; that
+was wrong, and the rate-limit error had been masking the validation error underneath it.
 
-This is the same wall that blocked the password reset in Module 29. It resolves when custom SMTP is
-configured, which is already a standing launch blocker.
+Testing `signUp` end-to-end therefore needs a real mailbox, which does not belong in an automated
+suite: it would send genuine mail on every run and create accounts on a live address.
+
+**So the split is:**
+
+- **Skipped, with the reason stated:** the `signUp` call itself, and the confirmation-gate shape
+  that depends on it.
+- **Genuinely proven:** the register page's fields, the zod validation cases, the referral wiring,
+  and `handle_new_user` — the trigger is exercised through `admin.createUser`, which *does* pass
+  validation, and asserts the profile row, the default `customer` role, the `full_name` metadata
+  path and the marketing unsubscribe token.
+
+One check in this file was caught passing **vacuously**: the confirmation-gate assertion keyed off
+"some account exists", and once the trigger section started creating accounts it passed because
+`signUp` had *errored* rather than because the gate works. It is now guarded on `signUp` having
+actually run. A check that passes because the thing it tests never ran is worse than no check.
 
 ## What is deliberately NOT here
 
