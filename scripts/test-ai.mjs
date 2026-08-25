@@ -169,6 +169,39 @@ check(
 );
 
 // ---------------------------------------------------------------------
+// Sweep fixtures leaked by a PREVIOUS crashed run, before creating new
+// ones.
+//
+// This is the same "idempotent setup, not better teardown" rule the
+// devtest accounts already follow, and it is here because the failure
+// actually happened: a run that died before its cleanup left an "AI Test
+// Cat <timestamp>" category and five "AI <label>" products sitting on the
+// live storefront, where the owner saw them as filter chips next to Asian
+// Wear and Western Wear. Teardown cannot fix that — a crashed process
+// does not run its teardown. Only the next startup can.
+//
+// The slugs are matched by shape (`ai-…-<13-digit epoch ms>`), so this can
+// only ever match a fixture this script itself created.
+console.log("\n=== Sweeping leaked fixtures from previous runs ===");
+{
+  const { data: staleProducts } = await admin
+    .from("products")
+    .select("id")
+    .or("slug.like.ai-source-1%,slug.like.ai-near-1%,slug.like.ai-far-1%,slug.like.ai-coviewed-1%,slug.like.ai-draft-1%");
+  if (staleProducts?.length) {
+    await admin.from("products").delete().in("id", staleProducts.map((p) => p.id));
+  }
+  const { data: staleCats } = await admin
+    .from("categories")
+    .delete()
+    .like("slug", "ai-test-cat-1%")
+    .select("id");
+  console.log(
+    `swept ${staleProducts?.length ?? 0} products, ${staleCats?.length ?? 0} categories`
+  );
+}
+
+// ---------------------------------------------------------------------
 console.log("\n=== Setup: admin, customer, catalogue ===");
 const staffAdmin = await signIn(`m22-admin-${suffix}@luxury-couture-devtest.local`, "correct-horse-e0");
 await admin.from("profiles").update({ role: "admin" }).eq("id", staffAdmin.userId);
