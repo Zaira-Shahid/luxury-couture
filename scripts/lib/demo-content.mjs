@@ -72,7 +72,11 @@ export const DEMO_PRODUCTS = [
     // garment, plus the colour the image should average near.
     photo: { query: "green gown woman", hex: "#046307" },
     name: "Zara Emerald Reception Gown",
-    categorySlug: "western-wear",
+    // Asian Wear, not Western. The photograph is an emerald velvet
+    // bridal with heavy gold work, a dupatta and mehndi'd hands — a
+    // South Asian look filed under Western Wear purely because the word
+    // "gown" is in its name.
+    categorySlug: "asian-wear",
     occasions: ["reception"],
     price: 2400,
     description:
@@ -145,6 +149,12 @@ export const DEMO_PRODUCTS = [
     // garment, plus the colour the image should average near.
     photo: { query: "beige dress woman", hex: "#E6D3B3" },
     name: "Isla Champagne Two-Piece",
+    // Seeded as a DRAFT: this is the one demo product with no usable
+    // photograph. It is a champagne two-piece in stretch crepe, and every
+    // champagne candidate sourced was a one-piece gown — so it would have
+    // had to ship either with a gradient placeholder or with a picture of
+    // a different garment. Publish it once a matching image exists.
+    status: "draft",
     categorySlug: "western-wear",
     occasions: ["reception"],
     price: 620,

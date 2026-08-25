@@ -25,7 +25,7 @@ export async function CraftsmanshipSection() {
                 // Describes what is happening in the frame, because the
                 // picture is carrying the section's argument rather than
                 // decorating it.
-                alt="An artisan setting pearls and beadwork by hand onto silk stretched over a wooden frame"
+                alt="An artisan stitching pearls, crystals and gold thread onto a bridal neckline by hand"
                 sizes="(min-width: 1024px) 50vw, 100vw"
                 className="object-cover"
               />
