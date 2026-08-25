@@ -48,6 +48,12 @@ export type SiteSettings = {
   };
   branding: {
     logoUrl: string | null;
+    /**
+     * Backdrop behind the admin panel. Decorative only — the layout
+     * keeps it behind a near-opaque scrim so dashboard text contrast is
+     * unaffected. Null renders the plain background.
+     */
+    adminBackgroundUrl: string | null;
     faviconUrl: string | null;
   };
   store: {
@@ -114,6 +120,9 @@ export type SiteSettings = {
     heroHeading: string | null;
     heroSubheading: string | null;
     heroImageUrl: string | null;
+    /** Our Craft panel. Null falls back to the gradient. */
+    craftImageUrl: string | null;
+
   };
 };
 
@@ -132,7 +141,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
     radius: null,
     fontPreset: "cormorant-geist",
   },
-  branding: { logoUrl: null, faviconUrl: null },
+  branding: { logoUrl: null, faviconUrl: null, adminBackgroundUrl: null },
   store: {
     socialLinks: {},
     contactEmail: null,
@@ -187,5 +196,6 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
     heroHeading: null,
     heroSubheading: null,
     heroImageUrl: null,
+    craftImageUrl: null,
   },
 };

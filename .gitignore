@@ -55,3 +55,17 @@ next-env.d.ts
 
 # Module 31 verification artifacts
 .m31/
+
+.m32/
+.photo-candidates/
+
+# Downloaded source photography, staged before upload to Supabase Storage.
+# The Storage bucket is the system of record; these are working copies.
+.unsplash/
+.mehndi/
+.reception/
+.engagement/
+.western/
+.craft/
+.fixes/
+.tmp/

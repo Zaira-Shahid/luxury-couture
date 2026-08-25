@@ -42,10 +42,75 @@ Two alternatives were rejected:
 - **A manifest file on disk.** Lost on a fresh clone or a CI run, after which `--clear` would have
   to guess. A delete that guesses is exactly what must never happen here.
 
-## The images are generated locally, and had to be
+## Photography
 
-No external placeholder service can work here, because of two of this project's own earlier
-decisions:
+```
+node --env-file=.env.local scripts/seed-demo-photos.mjs --fetch    # source + attach
+node --env-file=.env.local scripts/seed-demo-photos.mjs --status   # what is attached
+node --env-file=.env.local scripts/seed-demo-photos.mjs --revert    # back to gradients
+```
+
+Real bridal photography from **Pexels**, one photograph per product, drawn from six different
+search queries so the catalogue does not look like the same image twelve times.
+
+**Unsplash was asked for first and could not be used.** `api.unsplash.com` returns **401** without
+a registered application's Access Key, and the keyless `source.unsplash.com` endpoint is retired
+(**503**). Outbound HTTPS works, so it was a credential blocker, not a network one. Both licences
+permit commercial use; the difference is only which one we have a key for.
+
+`PEXELS_API_KEY` lives in `.env.local`, which is gitignored. **It is never inlined into a
+committed script.**
+
+### Everything is re-hosted, never hotlinked
+
+This is not a preference — an external URL breaks the storefront **twice**:
+
+- Module 28 set `remotePatterns` to the Supabase host, so `next/image` **throws** on any other
+  host, taking the page down rather than just the image.
+- Module 29's CSP restricts `img-src` to the same host, so the request is blocked outright.
+
+So every photograph is downloaded, **validated** (real JPEG/PNG magic number, sane size, under the
+bucket's 10 MB limit) and uploaded to Supabase Storage. Verified afterwards: **zero**
+`images.pexels.com` URLs appear in the rendered HTML.
+
+Each one also gets a `media` row, so it shows up in the admin Media Library exactly as an admin
+upload would. That is the same path `uploadMedia()` takes — `uploadToStorage` plus a media row —
+rather than calling the Server Action over HTTP, which would need a signed-in admin session to
+produce an identical result.
+
+### Licence position, stated rather than assumed
+
+The Pexels licence allows free use including commercially, with no attribution required. The
+photographer is recorded in `alt_text` anyway, so attribution is possible.
+
+**It grants no model or property releases.** Photographs of identifiable people may not be used to
+imply endorsement. That is fine for demo data standing in for a catalogue, and it is a real
+decision before these become the imagery of a live shop selling garments that are not the ones
+photographed.
+
+### Four bugs this surfaced
+
+Three in the seeder, one in its test:
+
+1. `--seed` **clobbered photographs with gradients** on every re-run.
+2. `--clear` treated `photos/` as a file and left **twelve orphaned objects** in storage —
+   Supabase's `list()` returns only direct children, so the subfolder needed recursion.
+3. `--clear` never deleted the `media` rows, so the manifest never drained and the Media Library
+   kept showing entries whose files were gone.
+4. `test-seed-demo.mjs` asserted **PNG**, which was right for gradients and wrong the moment JPEGs
+   arrived. It now accepts either.
+
+`test-seed-demo.mjs` clears and re-seeds as part of its own run, so it re-attaches the photography
+afterwards — otherwise every full suite pass would quietly strip the catalogue back to
+placeholders. With no `PEXELS_API_KEY` it degrades to gradients rather than failing.
+
+## The gradient fallback, and why it is still here
+
+Photography is now the default, but the generated gradients remain as the fallback — `--revert`
+restores them, and a checkout without `PEXELS_API_KEY` gets them rather than an empty catalogue.
+
+No external placeholder service can work here either, for the same two reasons the photographs had
+to be re-hosted:
 
 - **Module 28** set `next.config.mjs` `remotePatterns` to the Supabase host only — `next/image`
   **throws** on any other host, taking the page down rather than just the image.
