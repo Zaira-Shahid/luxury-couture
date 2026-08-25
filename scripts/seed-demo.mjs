@@ -39,19 +39,13 @@ const admin = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY, {
 const mode = process.argv.find((a) => a.startsWith("--")) ?? "--status";
 
 /**
- * The categories this project's own reference seed (0013) provides are
- * `bridal-lehengas`, `party-wear` and `engagement-collection`. The demo
- * content is written against friendlier names, so they are mapped rather
- * than duplicated — a demo store that invents a parallel category tree
- * teaches the owner nothing about their real one.
- *
- * `ready-to-wear` has no equivalent, so it IS created, and recorded in
- * the manifest like everything else so --clear removes it again.
+ * Categories are now the two `0061` created. demo-content.mjs names them
+ * directly, so this map is an identity pass kept only so an unknown slug
+ * fails loudly here rather than silently writing a null category_id.
  */
 const CATEGORY_MAP = {
-  bridal: "bridal-lehengas",
-  "occasion-wear": "party-wear",
-  "ready-to-wear": "ready-to-wear",
+  "asian-wear": "asian-wear",
+  "western-wear": "western-wear",
 };
 
 const DEMO_EMAIL_DOMAIN = "demo-store.example";
@@ -100,16 +94,13 @@ async function seed() {
   const { data: existingCategories } = await admin.from("categories").select("id, slug");
   const categoryBySlug = new Map((existingCategories ?? []).map((c) => [c.slug, c.id]));
 
-  if (!categoryBySlug.has("ready-to-wear")) {
-    const { data: created, error } = await admin
-      .from("categories")
-      .insert({ name: "Ready to Wear", slug: "ready-to-wear" })
-      .select("id")
-      .single();
-    if (error) throw new Error(`category: ${error.message}`);
-    categoryBySlug.set("ready-to-wear", created.id);
-    await record("categories", created.id, "ready-to-wear");
-    console.log("  + category ready-to-wear");
+  // Categories are created by migration 0061, not here. They are
+  // structural rather than demo content: retiring the demo store must
+  // not remove the shop's own category tree.
+  for (const slug of Object.values(CATEGORY_MAP)) {
+    if (!categoryBySlug.has(slug)) {
+      throw new Error(`category ${slug} is missing — run scripts/migrate.mjs first`);
+    }
   }
 
   // --- products ------------------------------------------------------
@@ -139,6 +130,27 @@ async function seed() {
     productBySlug.set(product.slug, row.id);
     await record("products", row.id, product.slug);
 
+    // Occasion tags. Replaced wholesale rather than merged, so removing
+    // a tag from demo-content.mjs actually removes it on the next seed.
+    if (product.occasions?.length) {
+      await admin.from("product_occasions").delete().eq("product_id", row.id);
+      const { data: occasionRows } = await admin
+        .from("occasions")
+        .select("id, slug")
+        .in("slug", product.occasions);
+
+      const missing = product.occasions.filter(
+        (slug) => !(occasionRows ?? []).some((o) => o.slug === slug)
+      );
+      if (missing.length) {
+        throw new Error(`unknown occasion(s) for ${product.slug}: ${missing.join(", ")}`);
+      }
+
+      await admin
+        .from("product_occasions")
+        .insert((occasionRows ?? []).map((o) => ({ product_id: row.id, occasion_id: o.id })));
+    }
+
     // Primary image. Portrait, because that is how garments are shot.
     const { url: imageUrl, path } = await uploadPlaceholder(product.slug, 1200, 1500);
     const { data: existingImage } = await admin
@@ -149,7 +161,23 @@ async function seed() {
       .maybeSingle();
 
     if (existingImage) {
-      await admin.from("product_images").update({ url: imageUrl }).eq("id", existingImage.id);
+      // Do NOT clobber a real photograph with a gradient.
+      //
+      // seed-demo-photos.mjs replaces these URLs with Pexels imagery
+      // re-hosted on Supabase. Re-running --seed used to overwrite that
+      // and silently put the placeholders back — and because
+      // test-seed-demo.mjs clears and re-seeds as part of its own run,
+      // the whole suite would have quietly reverted the catalogue's
+      // photography every time it ran.
+      const { data: current } = await admin
+        .from("product_images")
+        .select("url")
+        .eq("id", existingImage.id)
+        .maybeSingle();
+
+      if (!current?.url?.includes("demo-store/photos/")) {
+        await admin.from("product_images").update({ url: imageUrl }).eq("id", existingImage.id);
+      }
     } else {
       const { data: image } = await admin
         .from("product_images")
@@ -351,6 +379,12 @@ async function clear() {
   const ORDER = [
     "reviews",
     "product_images",
+    // Media Library rows for the sourced photographs. Added after the
+    // photo seeder started recording them: --clear was deleting the
+    // storage objects but leaving the media rows behind, so the manifest
+    // never drained and the Media Library kept showing entries whose
+    // files no longer existed.
+    "media",
     "social_gallery_images",
     "blog_posts",
     "pages",
@@ -385,12 +419,33 @@ async function clear() {
   // Generated images. Listed from storage under the demo prefix rather
   // than from the manifest, so an image whose manifest row was already
   // removed by a cascade is still cleaned up.
-  const { data: files } = await admin.storage.from(STORAGE_BUCKET).list(STORAGE_PREFIX, { limit: 1000 });
-  if (files?.length) {
-    const paths = files.map((f) => `${STORAGE_PREFIX}/${f.name}`);
-    const { error } = await admin.storage.from(STORAGE_BUCKET).remove(paths);
-    console.log(error ? `  ! storage: ${error.message}` : `  - ${paths.length} generated images`);
+  // Recurses. Supabase's list() returns only DIRECT children, and a
+  // subfolder comes back as an entry with no id — so the first version of
+  // this tried to remove "demo-store/photos" as if it were a file and
+  // silently left the twelve photographs inside it orphaned in storage.
+  async function removeUnder(prefix) {
+    const { data: entries } = await admin.storage
+      .from(STORAGE_BUCKET)
+      .list(prefix, { limit: 1000 });
+    if (!entries?.length) return 0;
+
+    const files = entries.filter((e) => e.id);
+    const folders = entries.filter((e) => !e.id);
+
+    let removed = 0;
+    for (const folder of folders) removed += await removeUnder(`${prefix}/${folder.name}`);
+
+    if (files.length > 0) {
+      const paths = files.map((f) => `${prefix}/${f.name}`);
+      const { error } = await admin.storage.from(STORAGE_BUCKET).remove(paths);
+      if (error) console.log(`  ! storage ${prefix}: ${error.message}`);
+      else removed += paths.length;
+    }
+    return removed;
   }
+
+  const removedFiles = await removeUnder(STORAGE_PREFIX);
+  if (removedFiles > 0) console.log(`  - ${removedFiles} images from storage`);
 
   const { count: remaining } = await admin
     .from("demo_seed_items")
