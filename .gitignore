@@ -67,5 +67,6 @@ next-env.d.ts
 .engagement/
 .western/
 .craft/
+.builder/
 .fixes/
 .tmp/
