@@ -3,16 +3,19 @@
  *
  * A NOTE ON THIS BATCH, because it differs from the other three.
  *
- * Fifteen images were supplied and SEVEN are used. That is a much lower
+ * Fifteen images were supplied and SIX are used. That is a much lower
  * hit rate than Nikkah, Mehndi or Reception, and the reason is not
  * quality — it is subject. Searching "engagement" returns photographs of
- * the MOMENT: rings being placed, clasped hands, bouquets. Eight of the
+ * the MOMENT: rings being placed, clasped hands, bouquets. Most of the
  * fifteen are exactly that. They are lovely photographs and there is no
  * garment in them to sell, so there is nothing truthful to write on a
  * product page beneath one.
  *
- * Two of the eight carry an "Unsplash+" watermark tiled across the whole
- * frame as well — those are the paid-tier images, and the free URL
+ * A seventh (e02) shipped and was then withdrawn once it was seen on a
+ * real product card. Its entry in UNUSED says why.
+ *
+ * Two of the rejects carry an "Unsplash+" watermark tiled across the
+ * whole frame as well — those are the paid-tier images, and the free URL
  * returns the watermarked copy.
  *
  * Every rejection is listed in UNUSED with its reason. Nothing was
@@ -59,6 +62,11 @@ export const UNUSED = [
     image: "e10.jpg",
     saw: "a rose-brown dress with sequinned cuffs, holding a dried bouquet",
     why: "'Unsplash+' watermark tiled across the whole frame",
+  },
+  {
+    image: "e02.jpg",
+    saw: "blush lace gown with a beaded sweetheart bodice, scalloped lace at the shoulders and cuffs, long sheer sleeves — photographed as a seated torso crop with a rose bouquet across the lap",
+    why: "USED AT FIRST, THEN WITHDRAWN. The garment is real and the colour is right, but the crop is headless and the bouquet takes the bottom third, so the card showed no neckline, no hem and no silhouette — nothing a buyer could judge a gown by. Kept here rather than quietly deleted so the reasoning survives.",
   },
   {
     image: "e11.jpg",
@@ -124,17 +132,6 @@ export const ENGAGEMENT_PRODUCTS = [
     price: 1250,
     description:
       "Champagne net with rose-gold floral appliqué worked over the bodice and down the sleeves, and a mint-green gathered skirt underneath.\n\nChampagne with mint is an unusual pairing and it is the reason to choose this one — most engagement wear puts gold with pink. The dupatta is edged with a line of pearls rather than a border.",
-  },
-  {
-    slug: "elena-blush-lace-gown",
-    name: "Elena Blush Lace Gown",
-    image: "e02.jpg",
-    saw: "blush-pink lace gown with a beaded sweetheart bodice, scalloped lace edging at the shoulders and cuffs, long sheer sleeves and a lattice-worked waist",
-    categorySlug: "western-wear",
-    occasions: ["engagement"],
-    price: 1290,
-    description:
-      "Blush lace over a matching lining, with a beaded sweetheart bodice and a lattice-worked panel at the waist. The lace is scalloped at the shoulders and again at the cuffs.\n\nLong sheer sleeves. Filed under Western Wear because it is cut as a gown — there is no dupatta and no separate skirt.",
   },
   {
     slug: "nimra-ivory-lace-gold-set",

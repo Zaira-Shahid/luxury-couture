@@ -45,19 +45,21 @@ const CONTENT_TYPES = {
   ".avif": "image/avif",
 };
 
-/** Writes the settings row, matching how the homepage admin screen stores it. */
+/**
+ * Writes the settings row.
+ *
+ * A plain upsert on `key`: site_settings has no `id` column, `key` IS the
+ * primary key (0012). The read-then-update version this replaced selected
+ * a column that does not exist, ignored the resulting error, and so
+ * always fell through to an insert that then failed on the duplicate key
+ * — meaning the first write for a key stuck and every later one silently
+ * did nothing.
+ */
 async function setSetting(value) {
-  const { data: existing } = await admin
+  const { error } = await admin
     .from("site_settings")
-    .select("id")
-    .eq("key", SETTING_KEY)
-    .maybeSingle();
-
-  if (existing) {
-    await admin.from("site_settings").update({ value }).eq("id", existing.id);
-  } else {
-    await admin.from("site_settings").insert({ key: SETTING_KEY, value });
-  }
+    .upsert({ key: SETTING_KEY, value }, { onConflict: "key" });
+  if (error) throw new Error(`setting ${SETTING_KEY}: ${error.message}`);
 }
 
 const arg = process.argv[2];

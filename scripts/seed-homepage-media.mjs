@@ -6,13 +6,16 @@
 //
 // WHERE THE PICTURES COME FROM, and why they differ per section:
 //
-//   Our Craft          — one sourced photograph (Pexels): an artisan's
-//                        hand setting pearls and beadwork onto fabric
-//                        stretched over a wooden adda frame. The section
-//                        copy claims hand embroidery by in-house
-//                        artisans, so the image has to actually show
-//                        that. A pretty flat-lay of a dress would have
-//                        illustrated the wrong sentence.
+//   Our Craft          — one sourced photograph (Pexels): hands mid-stitch,
+//                        setting pearls, crystals and gold thread into a
+//                        bridal neckline. The section copy claims hand
+//                        embroidery by in-house artisans, so the image has
+//                        to show the WORK HAPPENING. Two alternatives were
+//                        rejected for that reason: a flat-lay of finished
+//                        gold cord on red silk (beautiful, but nobody is
+//                        working) and a shot of the same craft in a
+//                        non-South-Asian tradition, which does not match
+//                        the zardozi/gota/dabka the copy names.
 //
 //   Collection covers  — a product photograph from INSIDE each
 //                        collection. Not sourced stock: a cover that
@@ -31,6 +34,7 @@
 // Everything is re-hosted on Supabase Storage. Nothing is hotlinked —
 // Module 28's remotePatterns and Module 29's CSP both allow the Supabase
 // host only.
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 
@@ -47,12 +51,22 @@ const BUCKET = "media";
 const mode = process.argv.find((a) => a.startsWith("--")) ?? "--status";
 
 /** The Our Craft photograph, already downloaded and viewed. */
-const CRAFT_SOURCE = ".craft/c-31935139.jpg";
+const CRAFT_SOURCE = ".craft/our-craft.jpg";
 const CRAFT_ALT =
-  "An artisan's hand setting pearls and silver beadwork onto mint silk stretched over a wooden adda frame";
+  "An artisan stitching pearls, crystals and gold thread onto a bridal neckline by hand";
 const CRAFT_SETTING = "homepage.craft_image_url";
 
-/** The admin panel backdrop, supplied by the owner and viewed. */
+/**
+ * The admin panel backdrop, supplied by the owner.
+ *
+ * A bride in deep red velvet and gold zardozi holding a lit diya, shot
+ * against near-black. Deliberately NOT the homepage hero — the two
+ * screens should not look like the same page.
+ *
+ * It is a DARK image behind a LIGHT theme, which is why the layout pairs
+ * it with translucent-but-blurred sidebar and topbar surfaces rather than
+ * letting the nav sit straight on it.
+ */
 const ADMIN_BG_SOURCE = ".craft/admin-bg.jpg";
 const ADMIN_BG_SETTING = "branding.admin_background_url";
 
@@ -80,18 +94,47 @@ const GALLERY_SLUGS = [
 ];
 
 
+/**
+ * Writes one settings row.
+ *
+ * A PLAIN UPSERT ON `key`, because site_settings has no `id` column —
+ * `key` is itself the primary key (0012). The previous version here read
+ * `.select("id")`, which errors; the error was not checked, so `existing`
+ * came back null, the code took the insert branch, and the insert then
+ * failed on the duplicate key. Silently. The net effect was that the
+ * first write for a key worked and EVERY LATER ONE DID NOTHING, which is
+ * why the owner swapped the admin backdrop repeatedly and kept seeing the
+ * original picture.
+ *
+ * The error is thrown now rather than ignored.
+ */
 async function setSetting(key, value) {
-  const { data: existing } = await admin
+  const { error } = await admin
     .from("site_settings")
-    .select("id")
-    .eq("key", key)
-    .maybeSingle();
-  if (existing) await admin.from("site_settings").update({ value }).eq("id", existing.id);
-  else await admin.from("site_settings").insert({ key, value });
+    .upsert({ key, value }, { onConflict: "key" });
+  if (error) throw new Error(`setting ${key}: ${error.message}`);
 }
 
-/** Resize, upload, write a media row, return the public URL. */
-async function upload(sourcePath, storagePath, altText, width) {
+/**
+ * Resize, upload, write a media row, return the public URL.
+ *
+ * `storageStem` is a STEM, not the final name: an 8-character hash of
+ * the encoded bytes is appended before the extension.
+ *
+ * WHY. These were previously written to a fixed name with a `?v=`
+ * timestamp on the stored URL to bust caches. It does not work — the
+ * owner swapped the admin backdrop and kept seeing the previous picture,
+ * even though the object in Storage was verifiably the new one. A query
+ * string is not part of the cache key everywhere it needs to be.
+ *
+ * Hashing the CONTENT into the filename means different bytes are always
+ * a different URL, so no cache anywhere can serve a stale image, and
+ * re-running with an unchanged file is a genuine no-op rather than a
+ * pointless new version. Superseded objects are left in the bucket; they
+ * are small, and deleting one still referenced by an older settings row
+ * would break that page instead.
+ */
+async function upload(sourcePath, storageStem, altText, width) {
   const original = await readFile(sourcePath);
   // Same reasoning as the hero: these render through next/image at known
   // display sizes, and shipping a 4000px original would put megabytes on
@@ -100,6 +143,9 @@ async function upload(sourcePath, storagePath, altText, width) {
     .resize({ width, withoutEnlargement: true })
     .jpeg({ quality: 82, mozjpeg: true })
     .toBuffer();
+
+  const hash = createHash("sha256").update(buffer).digest("hex").slice(0, 8);
+  const storagePath = storageStem.replace(/\.jpg$/, `-${hash}.jpg`);
 
   const { error } = await admin.storage
     .from(BUCKET)
@@ -137,9 +183,24 @@ async function seed() {
       CRAFT_ALT,
       1200
     );
-    await setSetting(CRAFT_SETTING, `${url}?v=${Date.now()}`);
-    console.log(`  + branding/our-craft.jpg (${(bytes / 1024).toFixed(0)} KB)`);
+    await setSetting(CRAFT_SETTING, url);
+    console.log(`  + ${url.split("/").pop()} (${(bytes / 1024).toFixed(0)} KB)`);
     console.log(`    ${CRAFT_ALT}`);
+  }
+
+  // -------------------------------------------------------------------
+  console.log("\nAdmin panel backdrop");
+  if (!existsSync(ADMIN_BG_SOURCE)) {
+    console.log(`  ! ${ADMIN_BG_SOURCE} missing — skipped`);
+  } else {
+    const { url, bytes } = await upload(
+      ADMIN_BG_SOURCE,
+      "branding/admin-background.jpg",
+      "A bride in red and gold bridal dress holding a lit diya",
+      2000
+    );
+    await setSetting(ADMIN_BG_SETTING, url);
+    console.log(`  + ${url.split("/").pop()} (${(bytes / 1024).toFixed(0)} KB)`);
   }
 
   // -------------------------------------------------------------------
