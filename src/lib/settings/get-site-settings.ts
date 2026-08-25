@@ -71,6 +71,8 @@ const LEGACY_STRING_KEYS: Record<string, [keyof SiteSettings, string]> = {
   "homepage.hero_heading": ["homepage", "heroHeading"],
   "homepage.hero_subheading": ["homepage", "heroSubheading"],
   "homepage.hero_image_url": ["homepage", "heroImageUrl"],
+  "homepage.craft_image_url": ["homepage", "craftImageUrl"],
+  "branding.admin_background_url": ["branding", "adminBackgroundUrl"],
 };
 
 function applyLegacyRow(settings: SiteSettings, row: Row): boolean {

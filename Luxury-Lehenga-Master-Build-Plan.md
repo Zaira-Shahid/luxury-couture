@@ -790,6 +790,23 @@ Create:
 
 Status: [x] COMPLETE
 
+ADDED LATER: an "Admin Panel" link in the site header, visible only to
+staff. It uses isStaffRole() from lib/auth/session.ts — the same function
+the (admin) layout and the middleware gate use — so what the header offers
+and what the guard admits can never disagree, and a role added in a future
+module is covered automatically.
+
+HIDING IT IS COSMETIC and the code says so. /admin is protected by
+middleware, the layout guard and RLS underneath; the link only stops a
+customer being shown a door they cannot open.
+scripts/test-admin-header-link.mjs (16 checks) asserts all nine admin
+roles see it, that a customer and a signed-out visitor do not — including
+that the label itself does not leak — and that both are still bounced with
+a 307 if they type /admin directly.
+
+The header now resolves getProfile() rather than getAuthUser(); it is
+memoized per request via React.cache, so this costs no extra round trip.
+
 Build:
 
 - homepage
@@ -1962,6 +1979,48 @@ TEXT IS A DRAFT and says so on its face; it names the data this app
 actually collects, but it needs a solicitor before launch. The blocker
 moves from "the link 404s" to "the policy needs review" — progress, not
 completion.
+
+IMAGE SOURCING, REVISED AFTER THE FACT. The generated gradients were
+replaced with real bridal photography at the owner's request.
+
+Unsplash was asked for first and could not be used: api.unsplash.com
+returns 401 without a registered application's Access Key, and the old
+keyless source.unsplash.com endpoint is retired (503). Outbound HTTPS
+works, so this was a credential blocker rather than a network one. The
+owner supplied a Pexels key instead; both licences permit commercial use,
+and the practical difference is only which one we have credentials for.
+
+THE CONSTRAINT THAT SHAPED THE IMPLEMENTATION: images are downloaded,
+validated and RE-HOSTED on Supabase Storage — never hotlinked. Module 28
+set next.config.mjs remotePatterns to the Supabase host only, so
+next/image THROWS on any other host and takes the page down rather than
+just the image; Module 29's CSP restricts img-src to the same. An
+external URL would break the storefront twice over. Verified after the
+fact: zero images.pexels.com URLs appear in the rendered HTML.
+
+Each photograph also gets a `media` row, so it appears in the admin Media
+Library exactly as an admin upload would. That is the same path
+uploadMedia() takes (uploadToStorage plus a media row) rather than a call
+to the Server Action itself, which would need a signed-in admin session
+and produce an identical result.
+
+12 products, 12 photographs, drawn from six different search queries so
+the catalogue does not look like the same photograph twelve times.
+Attribution is stored in alt_text even though the Pexels licence does not
+require it. THE LICENCE GRANTS NO MODEL OR PROPERTY RELEASES — fine for
+demo data, and a real decision before these become the imagery of a live
+shop selling garments that are not the ones photographed.
+
+Three bugs surfaced while wiring this up, all fixed: seed-demo.mjs --seed
+was clobbering photographs with gradients on every re-run; --clear treated
+the photos/ subfolder as a file and left twelve orphaned objects in
+storage (Supabase list() returns only direct children); and --clear never
+deleted the media rows, so the manifest never drained. A fourth was in the
+test rather than the code — it asserted PNG, which was right for gradients
+and wrong the moment JPEGs arrived.
+
+scripts/seed-demo-photos.mjs --fetch / --status / --revert. Requires
+PEXELS_API_KEY in .env.local, which is gitignored and never committed.
 
 A REAL FINDING, exposed by the demo data: test-ai.mjs's "co-viewed product
 now appears" was passing for the wrong reason. getCoViewAffinity reads
