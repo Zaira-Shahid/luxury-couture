@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -50,9 +51,16 @@ export function CallbackClient() {
     return (
       <div className="flex flex-col items-center gap-2 text-center">
         <p className="text-sm text-destructive">{error}</p>
-        <a href="/login" className="text-sm text-primary underline-offset-4 hover:underline">
+        {/*
+          <Link>, not <a>. A plain anchor forces a full page reload here,
+          which throws away the client-side auth state this component has
+          just been working with. Latent since Module 2 — it only surfaced
+          on a clean build, because Next caches lint results between
+          incremental builds and this file had not changed since.
+        */}
+        <Link href="/login" className="text-sm text-primary underline-offset-4 hover:underline">
           Back to sign in
-        </a>
+        </Link>
       </div>
     );
   }

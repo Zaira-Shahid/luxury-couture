@@ -146,6 +146,71 @@ const unknownCategory = await get(`/products?category=no-such-category-${suffix}
 check("an unknown category does not error", unknownCategory.status === 200);
 
 // ---------------------------------------------------------------------
+console.log("\n# Category and occasion filters COMPOSE");
+//
+// Would have failed before the restructure: each chip hard-coded its own
+// URL and dropped the other dimension, so picking a category then an
+// occasion silently cleared the category. That is exactly the pairing the
+// Asian/Western split exists to support.
+
+const { data: asianWear } = await admin
+  .from("categories")
+  .select("id, slug")
+  .eq("slug", "asian-wear")
+  .maybeSingle();
+check("the asian-wear category exists", !!asianWear);
+
+const { data: mehndi } = await admin
+  .from("occasions")
+  .select("id")
+  .eq("slug", "mehndi")
+  .maybeSingle();
+check("the mehndi occasion exists", !!mehndi);
+
+const { data: comboProduct } = await admin
+  .from("products")
+  .insert({
+    name: `Combo Asian Mehndi ${suffix}`,
+    slug: `combo-asian-mehndi-${suffix}`,
+    category_id: asianWear.id,
+    base_price: 700,
+    status: "published",
+    published_at: new Date().toISOString(),
+  })
+  .select("id, name")
+  .single();
+await admin
+  .from("product_occasions")
+  .insert({ product_id: comboProduct.id, occasion_id: mehndi.id });
+products.push(comboProduct);
+
+const bothFilters = await get(`/products?category=asian-wear&occasion=mehndi`);
+check("both filters together render", bothFilters.status === 200);
+check(
+  "a product matching BOTH filters appears",
+  bothFilters.html.includes(comboProduct.name)
+);
+check(
+  "a product outside the category is excluded",
+  !bothFilters.html.includes(emerald.name)
+);
+
+// The chips must now carry the other dimension in their hrefs.
+const asianOnly = await get(`/products?category=asian-wear`);
+check(
+  "an occasion chip preserves the active category",
+  /category=asian-wear&(amp;)?occasion=/.test(asianOnly.html),
+  "the chip href must keep the category"
+);
+
+const mehndiOnly = await get(`/products?occasion=mehndi`);
+check(
+  "a category chip preserves the active occasion",
+  /category=asian-wear&(amp;)?occasion=mehndi/.test(mehndiOnly.html),
+  "the chip href must keep the occasion"
+);
+
+// ---------------------------------------------------------------------
 console.log("\n# Ordering is deterministic");
 
 // Products are ordered by published_at descending. Asserting the ORDER

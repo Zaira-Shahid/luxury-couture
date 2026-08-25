@@ -11,11 +11,31 @@
  */
 
 /** Slugs map to the categories seeded by 0013. Resolved at seed time. */
+/**
+ * OCCASION TAGS AND 0062.
+ *
+ * Migration 0062 retired the `walima` and `party` occasions. These
+ * entries still handed them out, so every `--seed` re-tagged products
+ * with a dead occasion — and because a retired occasion is filtered out
+ * of every storefront read, four products ended up published, listed,
+ * and reachable under NO occasion chip at all. That is invisible unless
+ * you happen to browse by occasion and count.
+ *
+ * The affected tags were moved to `reception`, which is the closest live
+ * occasion for evening pieces (a charcoal kurta set, a champagne
+ * two-piece, a slate cocktail lehenga, a plum saree). `test-seed-demo`
+ * now fails if any published product is left without a live occasion,
+ * so this cannot silently come back.
+ */
 export const DEMO_PRODUCTS = [
   {
     slug: "amrita-crimson-bridal-lehenga",
+    // Photo sourcing: a query built from THIS product's colour and
+    // garment, plus the colour the image should average near.
+    photo: { query: "red bridal lehenga", hex: "#8B0000" },
     name: "Amrita Crimson Bridal Lehenga",
-    categorySlug: "bridal",
+    categorySlug: "asian-wear",
+    occasions: ["bridal", "nikkah", "baraat"],
     price: 2850,
     featured: true,
     description:
@@ -23,8 +43,12 @@ export const DEMO_PRODUCTS = [
   },
   {
     slug: "noor-ivory-gold-lehenga",
+    // Photo sourcing: a query built from THIS product's colour and
+    // garment, plus the colour the image should average near.
+    photo: { query: "ivory gold bridal lehenga", hex: "#EFE3C8" },
     name: "Noor Ivory & Gold Lehenga",
-    categorySlug: "bridal",
+    categorySlug: "asian-wear",
+    occasions: ["nikkah"],
     price: 3200,
     featured: true,
     description:
@@ -32,24 +56,36 @@ export const DEMO_PRODUCTS = [
   },
   {
     slug: "sana-rose-mehndi-set",
+    // Photo sourcing: a query built from THIS product's colour and
+    // garment, plus the colour the image should average near.
+    photo: { query: "pink lehenga bride", hex: "#C48793" },
     name: "Sana Rose Mehndi Set",
-    categorySlug: "bridal",
+    categorySlug: "asian-wear",
+    occasions: ["mehndi"],
     price: 1450,
     description:
       "A lighter set for the mehndi, in dusty rose georgette with mirror work and tassel detailing. Cut for movement — the skirt is deliberately unstiffened so it sits softly when you are seated on the floor.",
   },
   {
     slug: "zara-emerald-reception-gown",
+    // Photo sourcing: a query built from THIS product's colour and
+    // garment, plus the colour the image should average near.
+    photo: { query: "green gown woman", hex: "#046307" },
     name: "Zara Emerald Reception Gown",
-    categorySlug: "bridal",
+    categorySlug: "western-wear",
+    occasions: ["reception"],
     price: 2400,
     description:
       "Emerald velvet with a fitted bodice and a sweeping train, finished with crystal and bead work at the shoulder. Designed for a reception where you will be photographed standing rather than seated.",
   },
   {
     slug: "meher-blush-anarkali",
+    // Photo sourcing: a query built from THIS product's colour and
+    // garment, plus the colour the image should average near.
+    photo: { query: "pink anarkali dress woman", hex: "#F2C4D2" },
     name: "Meher Blush Anarkali",
-    categorySlug: "occasion-wear",
+    categorySlug: "asian-wear",
+    occasions: ["reception"],
     price: 890,
     featured: true,
     description:
@@ -57,56 +93,84 @@ export const DEMO_PRODUCTS = [
   },
   {
     slug: "aisha-midnight-sharara",
+    // Photo sourcing: a query built from THIS product's colour and
+    // garment, plus the colour the image should average near.
+    photo: { query: "blue lehenga woman", hex: "#1F2A44" },
     name: "Aisha Midnight Sharara",
-    categorySlug: "occasion-wear",
+    categorySlug: "asian-wear",
+    occasions: ["reception"],
     price: 1150,
     description:
       "Midnight blue sharara in silk crepe, with a cropped embroidered kurti and a sheer organza dupatta. The trouser is cut wide from the knee, which is what gives the silhouette its drape.",
   },
   {
     slug: "layla-saffron-sharara",
+    // Photo sourcing: a query built from THIS product's colour and
+    // garment, plus the colour the image should average near.
+    photo: { query: "yellow lehenga woman", hex: "#E8A33D" },
     name: "Layla Saffron Sharara",
-    categorySlug: "occasion-wear",
+    categorySlug: "asian-wear",
+    occasions: ["mehndi"],
     price: 980,
     description:
       "Saffron silk with gota patti trim along the hem and cuffs. A warm, celebratory colour that photographs well in low evening light.",
   },
   {
     slug: "hina-pistachio-gharara",
+    // Photo sourcing: a query built from THIS product's colour and
+    // garment, plus the colour the image should average near.
+    photo: { query: "green lehenga woman", hex: "#93C572" },
     name: "Hina Pistachio Gharara",
-    categorySlug: "occasion-wear",
+    categorySlug: "asian-wear",
+    occasions: ["mehndi"],
     price: 1050,
     description:
       "Soft pistachio green gharara in tissue silk, gathered at the knee in the traditional cut. Paired with a short kurti and a contrast dupatta in deep rose.",
   },
   {
     slug: "raya-slate-cocktail-lehenga",
+    // Photo sourcing: a query built from THIS product's colour and
+    // garment, plus the colour the image should average near.
+    photo: { query: "grey dress woman traditional", hex: "#6E7681" },
     name: "Raya Slate Cocktail Lehenga",
-    categorySlug: "occasion-wear",
+    categorySlug: "asian-wear",
+    occasions: ["reception"],
     price: 1320,
     description:
       "A modern cut in slate grey, with a fitted bustier and a panelled skirt. Minimal embroidery — the interest is in the seaming rather than the surface.",
   },
   {
     slug: "isla-champagne-two-piece",
+    // Photo sourcing: a query built from THIS product's colour and
+    // garment, plus the colour the image should average near.
+    photo: { query: "beige dress woman", hex: "#E6D3B3" },
     name: "Isla Champagne Two-Piece",
-    categorySlug: "ready-to-wear",
+    categorySlug: "western-wear",
+    occasions: ["reception"],
     price: 620,
     description:
       "A ready-to-wear champagne set in stretch crepe, available in standard sizing and dispatched from stock. The one piece in the range that is not made to order.",
   },
   {
     slug: "nadia-charcoal-kurta-set",
+    // Photo sourcing: a query built from THIS product's colour and
+    // garment, plus the colour the image should average near.
+    photo: { query: "black kurta woman", hex: "#3A3F45" },
     name: "Nadia Charcoal Kurta Set",
-    categorySlug: "ready-to-wear",
+    categorySlug: "asian-wear",
+    occasions: ["reception"],
     price: 340,
     description:
       "A charcoal kurta and palazzo set in washed cotton silk, cut for everyday wear. Machine washable, unlike almost everything else we make.",
   },
   {
     slug: "priya-plum-evening-saree",
+    // Photo sourcing: a query built from THIS product's colour and
+    // garment, plus the colour the image should average near.
+    photo: { query: "purple saree woman", hex: "#7E4569" },
     name: "Priya Plum Evening Saree",
-    categorySlug: "ready-to-wear",
+    categorySlug: "asian-wear",
+    occasions: ["reception", "party"],
     price: 780,
     description:
       "A pre-draped plum saree in satin georgette with a stitched pleat front, so it can be put on in a minute rather than twenty. Supplied with a matching fitted blouse.",
@@ -138,6 +202,10 @@ export const DEMO_COLLECTIONS = [
   {
     slug: "reception-evening",
     name: "Reception & Evening",
+    // All four collections are featured. Only two were, so the homepage
+    // "Featured Collections" grid — three columns wide — rendered two
+    // tiles and a gap. There are four collections and room for six.
+    featured: true,
     description:
       "Structured silhouettes for the reception and for evening events, where the piece is seen standing and in motion.",
     productSlugs: [
@@ -149,6 +217,7 @@ export const DEMO_COLLECTIONS = [
   {
     slug: "ready-to-wear",
     name: "Ready to Wear",
+    featured: true,
     description:
       "A small stocked range in standard sizing, dispatched within a few days rather than made to order.",
     productSlugs: [
