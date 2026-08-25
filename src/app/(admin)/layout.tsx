@@ -43,11 +43,29 @@ export default async function AdminLayout({
       */}
       {backdrop ? (
         <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10">
+          {/*
+            ONE dimming layer, not two.
+
+            This was opacity 0.30 behind an additional bg-background/88
+            scrim, which multiplies: 0.30 x (1 - 0.88) left about 3.6% of
+            the image showing. It was technically painted and effectively
+            invisible.
+
+            A single opacity is used instead so the number means what it
+            says.
+
+            The owner asked for it to run behind the WHOLE admin, sidebar
+            included, so the sidebar and topbar were dropped to 75% with a
+            backdrop-blur. Those two are the only surfaces where text sits
+            straight on the backdrop; everything else on a dashboard page
+            is inside an opaque bg-card, so no figure or table row is ever
+            read against the photograph. The blur is what keeps a busy
+            patch of it from fighting the nav labels.
+          */}
           <div
-            className="absolute inset-0 bg-cover bg-center opacity-[0.18]"
+            className="absolute inset-0 bg-cover bg-center opacity-[0.45]"
             style={{ backgroundImage: `url(${backdrop})` }}
           />
-          <div className="absolute inset-0 bg-background/90" />
         </div>
       ) : null}
       <AdminSidebar permissions={permissions} />

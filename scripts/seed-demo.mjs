@@ -117,9 +117,16 @@ async function seed() {
           description: product.description,
           base_price: product.price,
           currency: "GBP",
-          status: "published",
+          // Honours a per-product `status`, defaulting to published.
+          // Without this the field was ignored and every re-seed
+          // re-published Isla — the one demo product deliberately held
+          // back for want of a usable photograph.
+          status: product.status ?? "published",
           is_featured: !!product.featured,
-          published_at: new Date().toISOString(),
+          published_at:
+            (product.status ?? "published") === "published"
+              ? new Date().toISOString()
+              : null,
         },
         { onConflict: "slug" }
       )
@@ -197,7 +204,23 @@ async function seed() {
 
   // --- collections ---------------------------------------------------
   for (const collection of DEMO_COLLECTIONS) {
-    const { url: coverUrl } = await uploadPlaceholder(`collection-${collection.slug}`, 1600, 900);
+    // THE SAME GUARD THE PRODUCT IMAGES ABOVE ALREADY HAD, which
+    // collections were missing. seed-homepage-media.mjs points each cover
+    // at a real photograph of a piece inside that collection; without
+    // this check, any later `--seed` overwrote all four with generated
+    // gradients again, so the homepage silently reverted. The bug only
+    // showed up on a RE-run, which is why it survived the first pass.
+    const { data: existingCover } = await admin
+      .from("collections")
+      .select("cover_image_url")
+      .eq("slug", collection.slug)
+      .maybeSingle();
+    const keepCover = existingCover?.cover_image_url?.includes("demo-store/photos/");
+
+    const coverUrl = keepCover
+      ? existingCover.cover_image_url
+      : (await uploadPlaceholder(`collection-${collection.slug}`, 1600, 900)).url;
+
     const { data: row, error } = await admin
       .from("collections")
       .upsert(

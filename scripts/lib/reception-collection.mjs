@@ -169,7 +169,10 @@ export const RECEPTION_PRODUCTS = [
     name: "Amara Blush Tulle Reception Gown",
     image: "r14.jpg",
     saw: "blush-pink tulle gown with a beaded bodice in gold and rose, cold-shoulder straps with hanging bead fringe, full soft tulle skirt with scattered motifs",
-    categorySlug: "western-wear",
+    // Asian Wear: the frame shows a gold choker, mehndi on both hands and
+    // a dupatta over the arms. Blush tulle it may be, but it is not a
+    // Western gown.
+    categorySlug: "asian-wear",
     occasions: ["reception", "engagement"],
     price: 1380,
     description:

@@ -15,7 +15,7 @@ export function AdminTopbar({
   permissions: string[];
 }) {
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-4">
+    <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background/75 px-4 backdrop-blur-md">
       <div className="flex items-center gap-2">
         <AdminMobileNav permissions={permissions} />
         <Link href="/admin" className="font-heading text-base tracking-wide">

@@ -61,7 +61,7 @@ export function AdminSidebarNav({
 
 export function AdminSidebar({ permissions }: { permissions: string[] }) {
   return (
-    <aside className="sticky top-0 hidden h-screen w-64 shrink-0 overflow-y-auto border-r border-sidebar-border bg-sidebar px-3 py-6 md:block">
+    <aside className="sticky top-0 hidden h-screen w-64 shrink-0 overflow-y-auto border-r border-sidebar-border bg-sidebar/75 px-3 py-6 backdrop-blur-md md:block">
       <AdminSidebarNav permissions={permissions} />
     </aside>
   );
