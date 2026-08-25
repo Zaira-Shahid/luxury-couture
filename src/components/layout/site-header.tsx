@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { siteConfig } from "@/lib/config/site";
-import { getAuthUser } from "@/lib/auth/session";
+import { getProfile, isStaffRole } from "@/lib/auth/session";
 import { getCurrentBanner } from "@/lib/admin/get-banners";
 import { getCartItemCount } from "@/lib/cart/get-cart";
 import { getSiteSettings } from "@/lib/settings/get-site-settings";
@@ -10,8 +10,11 @@ import { getUnreadNotificationCount } from "@/lib/notifications/get-notification
 import { AnnouncementBar } from "./announcement-bar";
 
 export async function SiteHeader() {
-  const [user, settings, cartCount, banner, unreadCount] = await Promise.all([
-    getAuthUser(),
+  const [profile, settings, cartCount, banner, unreadCount] = await Promise.all([
+    // Was getAuthUser(). The profile is needed for the role, and
+    // getProfile() is memoized per request (React.cache), so this is the
+    // same number of round trips the header was already making.
+    getProfile(),
     getSiteSettings(),
     getCartItemCount(),
     getCurrentBanner(),
@@ -19,6 +22,14 @@ export async function SiteHeader() {
     // this costs nothing on the pages most people see.
     getUnreadNotificationCount(),
   ]);
+
+  const user = profile;
+  // MODULE 26's roles, via the same isStaffRole() the (admin) layout and
+  // middleware use — so what the header offers and what the guard admits
+  // can never disagree. A customer never sees this link, and hiding it is
+  // cosmetic anyway: /admin is protected by middleware, the layout guard
+  // and RLS underneath.
+  const isStaff = !!profile && isStaffRole(profile.role);
 
   return (
     <>
@@ -39,6 +50,36 @@ export async function SiteHeader() {
             )}
           </Link>
           <nav className="hidden items-center gap-6 text-sm text-muted-foreground sm:flex">
+            {/*
+              The two categories from 0061. Linked as ordinary listing
+              filters rather than bespoke routes, so they stay in step
+              with the chips on /products and compose with an occasion
+              tag exactly the same way.
+            */}
+            {/*
+              FIRST in the nav and styled like every other link — the
+              owner's call. It was a bordered button sitting between Cart
+              and My account, which made it read as a call to action
+              aimed at customers rather than the staff shortcut it is.
+              Staff-only visibility is unchanged; see isStaff above.
+            */}
+            {isStaff ? (
+              <Link href="/admin" className="transition-colors hover:text-foreground">
+                Admin Panel
+              </Link>
+            ) : null}
+            <Link
+              href="/products?category=asian-wear"
+              className="transition-colors hover:text-foreground"
+            >
+              Asian Wear
+            </Link>
+            <Link
+              href="/products?category=western-wear"
+              className="transition-colors hover:text-foreground"
+            >
+              Western Wear
+            </Link>
             <Link href="/collections" className="transition-colors hover:text-foreground">
               Collections
             </Link>

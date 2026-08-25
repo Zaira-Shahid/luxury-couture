@@ -20,6 +20,41 @@ export async function generateMetadata(): Promise<Metadata> {
   });
 }
 
+/**
+ * Builds a listing URL with ONE filter changed and the others preserved.
+ *
+ * The category and occasion chips each used to hard-code
+ * `/products?category=X` and `/products?occasion=X`, so picking one
+ * silently cleared the other — choosing "Asian Wear" then "Mehndi" left
+ * you with just Mehndi. The search form, meanwhile, preserved both via
+ * hidden inputs, so search composed and the chips did not.
+ *
+ * That was survivable when categories and occasions were near-duplicates.
+ * It is not now: the whole point of the Asian/Western split is that a
+ * category and an occasion tag are meant to narrow TOGETHER.
+ *
+ * Passing a value equal to the current one clears that filter, which is
+ * what makes a selected chip act as a toggle.
+ */
+function filterHref(
+  current: { category?: string; occasion?: string; q?: string },
+  change: { category?: string | null; occasion?: string | null }
+): string {
+  const next = {
+    category: change.category === undefined ? current.category : change.category,
+    occasion: change.occasion === undefined ? current.occasion : change.occasion,
+    q: current.q,
+  };
+
+  const params = new URLSearchParams();
+  if (next.category) params.set("category", next.category);
+  if (next.occasion) params.set("occasion", next.occasion);
+  if (next.q) params.set("q", next.q);
+
+  const query = params.toString();
+  return query ? `/products?${query}` : "/products";
+}
+
 export default async function ProductsPage({
   searchParams,
 }: {
@@ -63,9 +98,10 @@ export default async function ProductsPage({
           {occasions.map((occ) => (
             <Link
               key={occ.id}
-              href={
-                occasion === occ.slug ? "/products" : `/products?occasion=${occ.slug}`
-              }
+              href={filterHref(
+                { category, occasion, q },
+                { occasion: occasion === occ.slug ? null : occ.slug }
+              )}
               className={cn(
                 "rounded-full border border-border px-3 py-1 transition-colors hover:bg-muted",
                 occasion === occ.slug && "bg-foreground text-background hover:bg-foreground"
@@ -80,7 +116,7 @@ export default async function ProductsPage({
       {categories.length > 0 ? (
         <nav className="mb-10 flex flex-wrap gap-2 text-sm">
           <Link
-            href="/products"
+            href={filterHref({ category, occasion, q }, { category: null })}
             className={cn(
               "rounded-full border border-border px-3 py-1 transition-colors hover:bg-muted",
               !category && "bg-foreground text-background hover:bg-foreground"
@@ -91,7 +127,10 @@ export default async function ProductsPage({
           {categories.map((cat) => (
             <Link
               key={cat.id}
-              href={`/products?category=${cat.slug}`}
+              href={filterHref(
+                { category, occasion, q },
+                { category: category === cat.slug ? null : cat.slug }
+              )}
               className={cn(
                 "rounded-full border border-border px-3 py-1 transition-colors hover:bg-muted",
                 category === cat.slug && "bg-foreground text-background hover:bg-foreground"
