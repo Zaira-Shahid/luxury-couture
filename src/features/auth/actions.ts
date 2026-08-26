@@ -6,6 +6,7 @@ import { sendEmail } from "@/lib/email/send";
 import { welcomeEmail } from "@/lib/email/templates";
 import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
+import { absoluteUrl } from "@/lib/seo/urls";
 import {
   forgotPasswordSchema,
   loginSchema,
@@ -37,7 +38,12 @@ export async function signUp(formData: FormData): Promise<ActionResult> {
     password: parsed.data.password,
     options: {
       data: { full_name: parsed.data.fullName },
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
+      // absoluteUrl(), NOT raw process.env. NEXT_PUBLIC_SITE_URL was
+      // unset on the deployment, and interpolating an undefined value
+      // produced the literal string "undefined/auth/callback" — an
+      // invalid redirect that Supabase rejects, so confirmation emails
+      // could never land anyone back on the site.
+      emailRedirectTo: absoluteUrl("/auth/callback"),
     },
   });
 
@@ -126,7 +132,10 @@ export async function requestPasswordReset(formData: FormData): Promise<ActionRe
 
   const supabase = await createClient();
   const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback?next=/reset-password`,
+    // Same fix as sign-up above: "undefined/auth/callback?next=..." is
+    // what this produced on production, which is why password reset was
+    // dead there while working locally.
+    redirectTo: absoluteUrl("/auth/callback?next=/reset-password"),
   });
 
   if (error) {
