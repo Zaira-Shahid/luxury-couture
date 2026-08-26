@@ -30,6 +30,7 @@ import {
   DEMO_REVIEWS,
 } from "./lib/demo-content.mjs";
 import { generatePlaceholderPng } from "./lib/placeholder-image.mjs";
+import { guardDestructive } from "./lib/guard-destructive.mjs";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const admin = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY, {
@@ -478,6 +479,17 @@ async function clear() {
 
 // ---------------------------------------------------------------------
 
-if (mode === "--seed") await seed();
-else if (mode === "--clear") await clear();
+// BOTH modes are guarded, not just --clear.
+//
+// --clear deletes; --seed overwrites descriptions, occasion tags and
+// statuses, and re-uploads placeholder images. Against the live shop
+// either one is a content change nobody asked for, so both require an
+// explicit acknowledgement. --status is read-only and needs no guard.
+if (mode === "--seed") {
+  guardDestructive("--seed");
+  await seed();
+} else if (mode === "--clear") {
+  guardDestructive("--clear");
+  await clear();
+}
 else await status();

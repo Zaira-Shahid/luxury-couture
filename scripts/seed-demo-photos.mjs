@@ -35,6 +35,7 @@ import { existsSync, readFileSync } from "node:fs";
 
 import { DEMO_PRODUCTS } from "./lib/demo-content.mjs";
 import { LOCAL_PHOTO_MAP, LOCAL_PHOTO_DIR } from "./lib/local-photo-map.mjs";
+import { guardDestructive } from "./lib/guard-destructive.mjs";
 import { DEMO_PHOTO_QUERIES, downloadPhoto, searchPhotos } from "./lib/fetch-demo-photos.mjs";
 import { generatePlaceholderPng } from "./lib/placeholder-image.mjs";
 
@@ -258,6 +259,10 @@ async function status() {
 // ---------------------------------------------------------------------
 
 async function revert() {
+  // --revert DELETES the Storage objects behind every photograph and
+  // puts the catalogue back on generated gradients. This is the exact
+  // operation that broke the live shop when it ran as part of a suite.
+  guardDestructive("--revert");
   console.log("Restoring generated gradients...\n");
   let reverted = 0;
 
