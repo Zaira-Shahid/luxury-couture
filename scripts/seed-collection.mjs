@@ -34,6 +34,8 @@
 // should describe the demo store. These collections are catalogue
 // content and are cleared by their own `--clear` below.
 import { createClient } from "@supabase/supabase-js";
+
+import { guardDestructive } from "./lib/guard-destructive.mjs";
 import { existsSync, readFileSync } from "node:fs";
 
 const NAME = process.argv[2];
@@ -170,6 +172,10 @@ async function seed() {
   const active = new Set((allOccasions ?? []).filter((o) => o.is_active).map((o) => o.slug));
 
   if (collection.exclusive) {
+    // An `exclusive` collection wipes every existing tag for its occasion
+    // before seeding. Additive seeding is safe to re-run anywhere; this
+    // branch is not, so it asks first.
+    guardDestructive(`${NAME} --seed (it clears existing ${collection.occasion} tags)`);
     const { data: occRow } = await admin
       .from("occasions")
       .select("id")
@@ -279,6 +285,7 @@ async function seed() {
  * which existed before this seeder ran and are not its to remove.
  */
 async function clear() {
+  guardDestructive(`${NAME} --clear`);
   const slugs = PRODUCTS.map((p) => p.slug);
   const { data: removed } = await admin
     .from("products")

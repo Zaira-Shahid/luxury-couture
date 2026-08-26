@@ -20,6 +20,7 @@ import { execFileSync } from "node:child_process";
 
 import { generatePlaceholderPng, isPng } from "./lib/placeholder-image.mjs";
 import { DEMO_PAGES, DEMO_PRODUCTS } from "./lib/demo-content.mjs";
+import { guardDestructive, isProductionDatabase } from "./lib/guard-destructive.mjs";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
@@ -35,11 +36,33 @@ function check(label, ok, detail) {
   else failed += 1;
 }
 
+// SKIP ENTIRELY ON PRODUCTION — and do NOT set ALLOW_DESTRUCTIVE to get
+// past the guard.
+//
+// That distinction is the whole point. This script exercises `--clear`,
+// which is exactly what wiped the live shop's photographs when the suite
+// was run before a deployment. A test that quietly granted itself
+// permission would reproduce the incident precisely while reporting
+// PASS, so it refuses instead and says why.
+//
+// Exit 0, not 1: an un-runnable test in this environment is not a
+// failure of the code under test, and run-suite.mjs should not report it
+// as one. The line below is what a reader sees in the suite output.
+if (isProductionDatabase() && process.env.ALLOW_DESTRUCTIVE !== "1") {
+  guardDestructive("test-seed-demo.mjs (it runs --clear)", { soft: true });
+  console.log("SKIPPED — needs a non-production database. 0 passed, 0 failed");
+  process.exit(0);
+}
+
 const suffix = Date.now();
 
 function runSeeder(flag) {
+  // Pass the acknowledgement down: reaching here means the guard above
+  // already decided this run is allowed, and the child seeder has its own
+  // identical guard that would otherwise refuse.
   return execFileSync(process.execPath, ["--env-file=.env.local", "scripts/seed-demo.mjs", flag], {
     encoding: "utf8",
+    env: { ...process.env, ALLOW_DESTRUCTIVE: "1" },
   });
 }
 

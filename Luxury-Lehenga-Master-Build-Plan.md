@@ -2072,6 +2072,68 @@ Configure:
 
 Free-tier development setup first.
 
+## REQUIRED — separate Supabase projects for development and production
+
+This is not optional and it is not a nice-to-have. Until it is done, every
+local script run and every test-suite run happens against the database
+that serves live customers.
+
+**It has already caused an outage.** Running `scripts/run-suite.mjs` before
+a deployment executed `test-seed-demo.mjs`, which exercises
+`seed-demo.mjs --clear`, which deleted the Storage objects behind 50 of
+53 product photographs. The database rows survived pointing at URLs that
+returned HTTP 400, so the live storefront rendered broken images across
+almost the whole catalogue. Recovery took a full re-upload of every
+collection.
+
+A stop-gap guard is in place — `scripts/lib/guard-destructive.mjs` refuses
+any destructive seeder mode when the configured Supabase project is the
+production one, unless `ALLOW_DESTRUCTIVE=1` is set explicitly, and
+`test-seed-demo.mjs` skips rather than granting itself that permission.
+That guard reduces the risk; it does not remove it. Anyone who sets the
+variable out of habit is back where we started.
+
+Note that the guard keys on the **Supabase project ref**, not on
+`NEXT_PUBLIC_SITE_URL`. At the time of the outage `.env.local` held
+`NEXT_PUBLIC_SITE_URL=http://localhost:3000` while pointing at the
+production database — a site-URL check would have passed and the shop
+would still have gone down.
+
+Tasks:
+
+- [ ] Create a second Supabase project for development and testing.
+- [ ] Apply all migrations to it (`scripts/migrate.mjs`).
+- [ ] Point `.env.local` at the DEV project. Production credentials live
+      only in Vercel's environment variables, never in a local file.
+- [ ] Set `PRODUCTION_SUPABASE_REF` so the guard keeps recognising the
+      live project after the split.
+- [ ] Seed the dev project with the demo store so the suite has content.
+- [ ] Re-run the full suite against dev and confirm `test-seed-demo.mjs`
+      runs properly instead of skipping.
+- [ ] Document the two-project setup in `docs/ARCHITECTURE.md` and the
+      README's Getting Started section.
+
+## REQUIRED — environment variables actually set on Vercel
+
+Found live and not yet fixed: `NEXT_PUBLIC_SITE_URL` is unset on the
+deployment, so `src/lib/config/site.ts` falls back to
+`http://localhost:3000`. The consequences are visible in production HTML:
+
+- `<link rel="canonical">`, `og:url` and the Organization/WebSite
+  structured data all point at `http://localhost:3000`
+- password-reset and email-confirmation links are generated against
+  localhost, so account recovery is broken for real users
+- the sitemap and any absolute URL in an email are wrong
+
+Tasks:
+
+- [ ] Set `NEXT_PUBLIC_SITE_URL` to the real production origin in Vercel.
+- [ ] Add `<origin>/auth/callback` to Supabase Auth's redirect allow-list.
+- [ ] Audit every variable in `.env.example` against what Vercel actually
+      has; a missing one fails silently rather than loudly.
+- [ ] Re-check the rendered `<head>` on production for any remaining
+      `localhost` reference before calling the module done.
+
 ---
 
 # MODULE 33 — PRODUCTION READINESS & HANDOVER
