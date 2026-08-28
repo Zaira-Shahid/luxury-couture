@@ -4,19 +4,12 @@ import Link from "next/link";
 import { DeleteButton } from "@/components/admin/delete-button";
 import { Button } from "@/components/ui/button";
 import { deleteCollection } from "@/features/admin-catalog/actions";
-import { createClient } from "@/lib/supabase/server";
-import type { Collection } from "@/types/database";
+import { getAdminCollections } from "@/lib/catalog/get-admin-catalog";
 
 export const metadata: Metadata = { title: "Admin — Collections" };
 
-async function getAllCollections(): Promise<Collection[]> {
-  const supabase = await createClient();
-  const { data } = await supabase.from("collections").select("*").order("created_at", { ascending: false });
-  return (data ?? []) as Collection[];
-}
-
 export default async function AdminCollectionsPage() {
-  const collections = await getAllCollections();
+  const collections = await getAdminCollections();
 
   return (
     <div className="container py-10">

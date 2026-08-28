@@ -466,10 +466,26 @@ check(
   "super_admin, which holds settings.manage, is allowed through",
   adminDiag.json?.result?.structuredContent?.status === "SUCCESS"
 );
+// Asserted as an INVARIANT, not a count. This was `total === 3` — the
+// three system tools — which went stale the moment Module 37 registered
+// fourteen read tools. A number that has to be edited by every later
+// module is a test that fails for the wrong reason; what must hold is
+// that the registry is internally consistent and still contains the
+// system tools that prove the pipeline.
+const diagRegistry = adminDiag.json.result.structuredContent.data.registry;
 check(
-  "diagnostics reports the registry contents",
-  adminDiag.json.result.structuredContent.data.registry.total === 3
+  "diagnostics reports a registry that adds up",
+  diagRegistry.total === diagRegistry.read + diagRegistry.write
 );
+check(
+  "diagnostics lists a name for every registered tool",
+  diagRegistry.names.length === diagRegistry.total
+);
+check(
+  "diagnostics still reports the system tools",
+  ["system_ping", "system_whoami", "system_diagnostics"].every((n) => diagRegistry.names.includes(n))
+);
+check("no high-risk tool is registered without being a write tool", diagRegistry.highRisk <= diagRegistry.write);
 check(
   "diagnostics reports integrations as booleans only",
   ["boolean"].includes(typeof adminDiag.json.result.structuredContent.data.integrations.stripe)

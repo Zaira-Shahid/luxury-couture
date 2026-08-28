@@ -1,5 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
-import { logger } from "@/lib/logger";
+import { readFailed, readerClient, type ReaderOptions } from "@/lib/supabase/reader";
 import { BUILDER_OPTION_TABLES, type BuilderOptionTable } from "@/types/database";
 
 export function isBuilderOptionTable(value: string): value is BuilderOptionTable {
@@ -13,24 +12,32 @@ export function isBuilderOptionTable(value: string): value is BuilderOptionTable
  * description for hex_value) and identical RLS, so one generic function
  * covers all of them rather than six near-duplicates.
  */
-export async function getAdminOptionRows<T>(table: BuilderOptionTable): Promise<T[]> {
-  const supabase = await createClient();
+export async function getAdminOptionRows<T>(
+  table: BuilderOptionTable,
+  options?: ReaderOptions
+): Promise<T[]> {
+  const supabase = await readerClient(options);
   const { data, error } = await supabase.from(table).select("*").order("sort_order", { ascending: true });
 
   if (error) {
-    logger.warn("failed to load admin builder options", { table, message: error.message });
-    return [];
+    return readFailed(error, options, [] as T[], "failed to load admin builder options", { table });
   }
   return (data ?? []) as T[];
 }
 
-export async function getAdminOptionRow<T>(table: BuilderOptionTable, id: string): Promise<T | null> {
-  const supabase = await createClient();
+export async function getAdminOptionRow<T>(
+  table: BuilderOptionTable,
+  id: string,
+  options?: ReaderOptions
+): Promise<T | null> {
+  const supabase = await readerClient(options);
   const { data, error } = await supabase.from(table).select("*").eq("id", id).maybeSingle();
 
   if (error) {
-    logger.warn("failed to load admin builder option", { table, id, message: error.message });
-    return null;
+    return readFailed(error, options, null as T | null, "failed to load admin builder option", {
+      table,
+      id,
+    });
   }
   return (data ?? null) as T | null;
 }
