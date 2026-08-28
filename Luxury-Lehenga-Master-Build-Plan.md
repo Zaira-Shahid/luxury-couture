@@ -3460,6 +3460,30 @@ Outstanding, in two independent tracks:
 Modules 34, 35 remain FUTURE PHASE and are out of the current commercial
 plan.
 
+Suite housekeeping after Module 36: three scripts were failing on stale
+assertions rather than on broken behaviour, and are fixed rather than
+muted.
+
+- `verify-rls.mjs` and `test-settings-pass1.mjs` asserted that
+  `site_settings` is unreadable by anonymous visitors. Migration 0019
+  (Module 3) deliberately made it public-read, because branding, theme and
+  the SEO defaults have to render for every visitor. The assertions only
+  ever passed because the table held no rows; the homepage imagery keys
+  added in the catalogue work put four rows in and exposed them. They now
+  assert what actually protects anything: the table carries no
+  credential-shaped keys, a signed-in customer sees no more rows than an
+  anonymous one, and neither can write.
+- `test-chatbot.mjs` proved "an unmatched discovery query invents nothing"
+  by asking for chartreuse — which stopped being an impossible request the
+  moment the demo catalogue gained a chartreuse kurti. The unmatched term
+  is now generated per run, so it can never be a real product.
+
+Note for future suite runs: the suite must be run against a PRODUCTION
+server (`next build` then `next start`), not `next dev`. Three `test-a11y`
+checks read the compiled CSS out of the built page and fail on a dev
+server, where Next injects styles through JavaScript instead of linking a
+stylesheet.
+
 Next Action:
 
 `Start Module 37` (MCP track) or `Start Module 32` (deployment track)

@@ -30,11 +30,19 @@ await check("anon reads categories", "some rows", () =>
   anon.from("categories").select("*")
 );
 
-// Owner/admin-only paths — grant now exists, so these must come back as a
-// clean *empty result* (RLS filtering), not a permission-denied error.
-await check("anon reads site_settings (admin-only)", "empty, no error", () =>
+// site_settings is deliberately public-read (migration 0019, Module 3):
+// branding, theme, the announcement bar and the SEO defaults have to
+// render for every visitor, not just admins. This assertion used to
+// expect an empty result and only passed while the table happened to
+// hold no rows — the homepage imagery keys made that accidental pass
+// visible. What matters is enforced below and in test-settings-pass1:
+// the table holds no credentials, and anonymous writes are rejected.
+await check("anon reads site_settings (public config by design)", "some rows", () =>
   anon.from("site_settings").select("*")
 );
+
+// Owner/admin-only paths — grant now exists, so these must come back as a
+// clean *empty result* (RLS filtering), not a permission-denied error.
 await check("anon reads profiles (owner/admin-only)", "empty, no error", () =>
   anon.from("profiles").select("*")
 );
@@ -54,4 +62,7 @@ await check(
 // (grant exists now, so this must be a policy rejection, not 42501).
 await check("anon cannot insert into fabrics", "error", () =>
   anon.from("fabrics").insert({ name: "Hijacked", slug: `hijacked-${Date.now()}` })
+);
+await check("anon cannot write site_settings", "error", () =>
+  anon.from("site_settings").upsert({ key: "seo.default_title", value: "Hijacked" })
 );

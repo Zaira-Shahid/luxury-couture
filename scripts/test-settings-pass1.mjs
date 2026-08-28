@@ -165,10 +165,27 @@ check(
 
 console.log("\n=== site_settings RLS ===");
 const anon = createClient(url, anonKey, { auth: { persistSession: false } });
-const { data: anonRead } = await anon.from("site_settings").select("key").limit(5);
-check("anonymous cannot read settings", (anonRead ?? []).length === 0);
-const { data: custRead } = await customer.client.from("site_settings").select("key").limit(5);
-check("a customer cannot read settings", (custRead ?? []).length === 0);
+// site_settings is public-read on purpose (migration 0019, Module 3):
+// branding, theme and the SEO defaults render for anonymous visitors.
+// These two assertions previously expected an empty result and passed
+// only while the table held no rows. The invariant that actually
+// protects anything is that this table carries no credentials — those
+// are env-only, asserted above — and that only staff can write.
+const { data: anonRead } = await anon.from("site_settings").select("key");
+check("anonymous can read public settings", Array.isArray(anonRead));
+check(
+  "no credential-shaped key is ever readable from site_settings",
+  (anonRead ?? []).every((row) => !/key|secret|token|password/i.test(row.key))
+);
+const { error: anonWrite } = await anon
+  .from("site_settings")
+  .upsert({ key: "seo.default_title", value: "Hijacked" });
+check("anonymous cannot write settings", Boolean(anonWrite));
+const { data: custRead } = await customer.client.from("site_settings").select("key");
+check(
+  "a signed-in customer sees the same rows as anonymous, not more",
+  (custRead ?? []).length === (anonRead ?? []).length
+);
 const { error: custWrite } = await customer.client
   .from("site_settings")
   .upsert({ key: "seo.indexing_enabled", value: true });
