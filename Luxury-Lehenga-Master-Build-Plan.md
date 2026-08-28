@@ -2233,22 +2233,43 @@ never decides what the database will accept. Every rule the admin UI
 enforces is enforced identically on the MCP path, because both go through
 the same application services.
 
+**Scope extension, recorded after Module 36 on the developer's
+instruction: MCP serves two audiences, not one.** Alongside the admin/staff
+tools above, a second category lets a signed-in CUSTOMER ask about their
+OWN data through the existing storefront chatbot (Module 23).
+
+> "Where is my order?"
+> "What measurements do you have on file for me?"
+> "How many loyalty points do I have?"
+
+The two audiences share one transport, one registry, one validation path
+and one error model. They differ in exactly one respect — an admin tool
+acts on ANY record its permission allows, a customer tool acts only on the
+caller's OWN records. That difference is spelled out in 12B.16, which is
+binding on every customer tool.
+
 ## 12B.2 Architecture
 
 ```text
-Admin (signed-in, real Supabase session)
-        |
-Admin AI Chat  (Module 42)  /  external MCP client
-        |
-Claude / AI assistant
-        |
+Admin (signed-in, real Supabase session)      Customer (signed-in)
+        |                                             |
+Admin AI Chat (Module 42) / external client   Storefront chatbot (Module 23)
+        |                                             |
+Claude / AI assistant                         Claude / AI assistant
+        |                                             |
+        +----------------------+----------------------+
+                               |
 POST /api/mcp          <- JSON-RPC 2.0, MCP wire protocol
         |
 MCP server (src/lib/mcp/server.ts)
         |
-Tool registry  ->  tool definition (schema, kind, permission, risk)
+Tool registry  ->  tool definition
+                   (schema, kind, audience, permission, risk)
         |
 Zod validation  ->  authorization  ->  confirmation gate
+        |               |
+        |               +-- audience "admin"    -> role + permission check
+        |               +-- audience "customer" -> signed-in + self-scope
         |
 Application service (src/lib/<domain>/, src/features/<domain>/actions.ts)
         |
@@ -2256,6 +2277,10 @@ Supabase (RLS enforced AS THE CALLER)
         |
 PostgreSQL / Storage
 ```
+
+Both lanes are the same code path. The customer lane adds no second
+transport, no second registry and no second server — only a declared
+audience on the tool definition and the self-scoping rule of 12B.16.
 
 Two boundaries do the real work and neither is the AI's to cross:
 
@@ -2299,26 +2324,51 @@ Rejected alternatives, recorded so they are not re-proposed:
 
 Server-side, always, and never by hiding a tool.
 
-Every tool definition declares a `permission` from the existing 23-key
+Every tool declares an `audience` — `"admin"` or `"customer"` — and the
+audience selects which checks apply. As of Module 36 every registered tool
+is `audience: "admin"`; the customer audience is specified here and in
+12B.16 and arrives with Module 44.
+
+**Admin tools.** Each declares a `permission` from the existing 23-key
 catalogue in `src/lib/auth/permissions.ts`. No new role and no new
 permission key was invented for MCP — MCP is a second doorway to
 capabilities the platform already models, so a new key would mean a
 capability the admin UI cannot express.
 
-Three checks run in order on every `tools/call`:
+Three checks run in order on every `tools/call` for an admin tool:
 
 1. **Authenticated?** No session -> `UNAUTHORIZED`.
-2. **Admin role?** A `customer` reaches no MCP tool at all -> `FORBIDDEN`.
+2. **Admin role?** A `customer` reaches no ADMIN tool at all -> `FORBIDDEN`.
 3. **Holds the tool's permission?** Read from the DATABASE
    (`role_permissions`), not the code mirror -> `FORBIDDEN`.
 
-`tools/list` is filtered by the same permissions, so an assistant acting
-for a Production account is never even told that `payments_refund` exists.
-That filtering is a **usability** measure, not the enforcement: step 3 runs
-on the call regardless of what was listed, because a client can call a name
-it was never shown.
+**Customer tools.** The 23 permission keys are all staff capabilities —
+`orders.read` means "read ANY order" — so none of them can express "read
+my own order", and reusing one would grant a customer a staff capability.
+Customer tools therefore declare no permission key. They are gated instead
+by:
 
-Fails closed everywhere. A failed permission lookup reads as "refused".
+1. **Authenticated?** No session -> `UNAUTHORIZED`. Anonymous visitors
+   reach no customer tool; the chatbot's existing FAQ and discovery
+   answers stay available to them, unchanged.
+2. **Self-scope.** The handler resolves the caller's id server-side and
+   filters on it. Never a client-supplied id — see 12B.16.
+
+This is a deliberate, recorded amendment to the original rule "a customer
+reaches no MCP tool at all". It is narrowed rather than dropped: a
+customer still reaches no tool that can name another person's record, and
+inventing a customer permission key was rejected because it would imply a
+capability the admin UI does not model.
+
+`tools/list` is filtered by audience first and then by permission, so a
+customer session is never told that `payments_refund` exists, and an
+assistant acting for a Production account is not told either. That
+filtering is a **usability** measure, not the enforcement: the checks above
+run on the call regardless of what was listed, because a client can call a
+name it was never shown.
+
+Fails closed everywhere. A failed permission lookup reads as "refused", and
+an unresolvable caller identity reads as "refused" rather than "no filter".
 
 ## 12B.5 Read tools vs write tools
 
@@ -2405,6 +2455,24 @@ groups: `products_list`, `products_get`, `products_update`,
 One convention, no mixing. A new tool that does not fit an existing domain
 prefix needs a new domain folder, not a new naming style.
 
+**Customer tools: `<domain>_my_<action>`.** `orders_my_list`,
+`orders_my_get`, `measurements_my_list`, `addresses_my_list`,
+`quotations_my_list`, `appointments_my_list`, `loyalty_my_balance`,
+`notifications_my_list`.
+
+The scope instruction that authorised these sketched them as
+`get_my_orders`, `get_my_addresses` and so on. That form is recorded here
+and NOT adopted, because it is verb-first and would break the domain-first
+sort this section already fixed as DECIDED — `get_my_orders` and
+`orders_list` would sit in different places in `tools/list` while
+describing the same domain. The `_my_` infix carries the same meaning and
+keeps one convention: an assistant reading the tool list sees every orders
+tool together, with the self-scoped one visibly marked.
+
+If the developer prefers the original `get_my_*` form, it is a one-line
+change per tool and should be settled before Module 44 is built, not
+after.
+
 ## 12B.10 Directory structure
 
 Chosen after inspecting the existing tree; it follows the established
@@ -2426,10 +2494,17 @@ src/lib/mcp/
     index.ts      assembles the registry from the domain modules
     system.ts     system_ping, system_whoami, system_diagnostics
     <domain>.ts   one file per domain, added by its own module
+    customer/     customer-audience tools (Module 44), one file per domain
 src/app/api/mcp/route.ts
 ```
 
 One file per domain. No single file containing every tool.
+
+Customer tools live under `tools/customer/` rather than mixed into the
+admin domain files. The split is not cosmetic: it makes "which tools can a
+customer reach" answerable by looking at a directory, and it makes an
+admin tool accidentally registered with `audience: "customer"` visible in
+review rather than buried in a 300-line file.
 
 ## 12B.11 Business-logic rule
 
@@ -2466,6 +2541,9 @@ weight, as in Module 26.
 ## 12B.14 Known limitations (as of Module 36)
 
 - Only the system tools exist. No domain tools yet; they arrive per module.
+- No customer-facing tools exist. The customer audience is SPECIFIED in
+  12B.16 and scheduled as Module 44; nothing in it is built, and every
+  registered tool today is `audience: "admin"`.
 - No streaming, no MCP resources, no prompts, no sampling — `tools/*` only.
 - Confirmation tokens are stateless, so a token is single-action but not
   single-USE: within its 5-minute TTL the same token could execute the same
@@ -2483,12 +2561,104 @@ HTTP. No unrestricted Supabase access. No exposure of the service-role key
 to the browser or to any model. No tool that takes a table name as an
 argument.
 
+## 12B.16 Customer-facing tools (SPECIFIED, not yet built)
+
+Added after Module 36 on the developer's instruction. Nothing in this
+section is implemented; it is the contract Module 44 must meet.
+
+### The five rules
+
+1. **Ownership is re-checked in the application layer, not left to RLS.**
+   Every customer tool filters on the caller's own id — resolved
+   server-side from the Supabase session — in addition to whatever RLS
+   already enforces. This is the same defence-in-depth the codebase
+   already uses: `acceptQuotation` re-checks
+   `quotation.customer_id !== user.id` before acting, even though RLS
+   would already have refused. Two independent barriers, so a policy
+   regression alone cannot leak a record.
+2. **Read-only in this phase.** No customer write tool — no address edit,
+   no order cancellation, no appointment rescheduling. A customer types
+   free-form natural language with no staff training and no review step,
+   so the cost of a misread instruction is borne by someone who never
+   approved it. Customer writes are a separate decision requiring their
+   own review, not an increment of this module.
+3. **Identity is resolved server-side, never claimed by the client.** The
+   caller's id comes from the Supabase session on the request. A
+   `customerId` argument in a tool's input schema is a defect, not a
+   convenience: it would let an assistant — or anyone crafting a request
+   — name a person and be believed. The tool schemas must not accept one,
+   and the registry test must assert that none does.
+4. **Cross-customer isolation is explicitly security-tested.** The bar is
+   the one already applied to RLS work in `scripts/verify-cross-user.mjs`:
+   create two real customers, sign both in, and assert that each one's
+   tools return their own rows and NOTHING of the other's — by id, by
+   count, and by attempting to fetch the other's record directly by its
+   id and getting `NOT_FOUND` rather than a row. A customer tool is not
+   complete until the negative half of that test exists.
+5. **The storefront chatbot is the entry point, not a new surface.** These
+   tools extend the Module 23 chatbot's existing FAQ and discovery
+   capability. No new page, no new widget, no second chat.
+
+### What the chatbot needs before it can carry them
+
+`/api/chat/route.ts` as built for Module 23 is ANONYMOUS. It never calls
+`auth.getUser()`, and it rate-limits on a client-supplied `sessionId` plus
+the request IP. A client-supplied session id is not an identity and must
+never be treated as one.
+
+Module 44 therefore has to add authenticated identity to that route —
+resolving the real user from the Supabase session — while leaving the
+anonymous FAQ and discovery paths working exactly as they do now. A
+visitor who is not signed in must get the current behaviour, not an error
+and not a login wall.
+
+### Reuse, not reimplementation
+
+12B.11 applies unchanged: these tools call the readers the account pages
+already call. Most exist and are already self-scoped:
+
+- `getMyOrders`, `getOrderDetail` — `src/lib/orders/get-orders.ts`
+- `getMeasurementProfiles`, `getMeasurementProfile` —
+  `src/lib/measurements/get-profiles.ts`
+- `getMyAppointments` — `src/lib/consultations/get-appointments.ts`
+- `getMyLoyaltyAccount` — `src/lib/loyalty/get-loyalty.ts`
+- `getNotificationFeed` — `src/lib/notifications/get-notifications.ts`
+
+Two have no reader to call. Addresses and the customer's own quotations
+are queried inline inside their page components —
+`src/app/(account)/account/addresses/page.tsx` and
+`src/app/(account)/account/quotations/[id]/page.tsx`. Module 44 must
+extract those into `src/lib/<domain>/` readers and have BOTH the page and
+the tool use them. Copying the query into a tool handler would create the
+second business-logic system 12B.11 forbids.
+
+### Data minimisation
+
+A chatbot answer is rendered into a page and may be logged. Customer tools
+return the fields needed to answer the question and no more — no payment
+tokens, no internal staff notes, no admin-only order fields, no other
+person's name or contact details on a shared record. Where a reader
+returns an admin-shaped row, the tool narrows it before returning.
+
+### Audit
+
+These tools are `kind: "read"`, so 12B.5 applies: no `audit_logs` row.
+The application log records the call as it does for every read tool. When
+customer WRITE tools are eventually authorised, they are audited like any
+other write.
+
 ---
 
 # 12C. PHASE 6 — MCP MODULE ROADMAP
 
-Appended as Modules 36-43. Modules 0-35 are unchanged and unrenumbered;
+Appended as Modules 36-44. Modules 0-35 are unchanged and unrenumbered;
 document order is not build order, so Phase 6 may run before Modules 32-33.
+
+Module 44 was appended after 43 rather than inserted next to Module 37,
+which is where it belongs by dependency. Inserting it would have
+renumbered 38-43 after they were already written down, and a module number
+that moves is worse than one that sits out of build order. Build order is
+stated per module; 44 is buildable as soon as 37 is done.
 
 ---
 
@@ -2585,6 +2755,44 @@ Status: [ ] NOT STARTED
 Tool-call metrics, authorization-failure visibility in Admin, an MCP section
 in the security audit, load and abuse testing, and — if wanted — a stdio
 adapter over the same registry for external Claude clients.
+
+# MODULE 44 — MCP CUSTOMER SELF-SERVICE READ TOOLS
+
+Status: [ ] NOT STARTED
+
+Build order: after Module 37, not after Module 43. It is numbered last only
+because renumbering an existing module is not allowed (see above). It
+depends on Module 36 (registry, transport, authorization, error model),
+Module 37 (the read-tool patterns — result envelope, pagination, the
+read-tool test shape) and Module 23 (the storefront chatbot). It does NOT
+depend on Modules 38-43.
+
+The first `audience: "customer"` tools. Read-only. Governed by 12B.16,
+which is binding and not restated here.
+
+Expected tools, named per 12B.9:
+
+- `orders_my_list`, `orders_my_get`
+- `measurements_my_list`
+- `addresses_my_list`
+- `quotations_my_list`
+- `appointments_my_list`
+- `loyalty_my_balance`
+- `notifications_my_list`
+
+Also in scope, because the tools cannot work without them:
+
+- Authenticated identity on `/api/chat/route.ts`, which is anonymous
+  today, WITHOUT changing the anonymous FAQ and discovery behaviour.
+- Extracting the addresses and customer-quotations queries out of their
+  page components into `src/lib/` readers, used by both the pages and the
+  tools.
+- A cross-customer isolation test to the standard of
+  `scripts/verify-cross-user.mjs` — two real customers, and the negative
+  half carrying the weight.
+
+Explicitly NOT in scope: any customer write tool. Deferred by 12B.16 rule
+2, to be authorised separately or not at all.
 
 ---
 
@@ -3455,7 +3663,17 @@ Outstanding, in two independent tracks:
 - Deployment track: `MODULE 32 — PRODUCTION DEPLOYMENT` (not started),
   then `MODULE 33 — PRODUCTION READINESS & HANDOVER`.
 - MCP track (Phase 6, see section 12B/12C): `MODULE 37 — MCP READ TOOLS`
-  (not started), then 38-43.
+  (not started), then 38-43, plus `MODULE 44 — MCP CUSTOMER SELF-SERVICE
+  READ TOOLS` (not started), which is buildable straight after 37.
+
+Scope extension recorded, not built: MCP now serves customers as well as
+staff. The architecture is documented in 12B.1, 12B.2, 12B.4, 12B.9,
+12B.10 and 12B.16, and scheduled as Module 44. No code has been written
+for it and none should be until the developer gives the go-ahead. Two
+points in that documentation need a decision first: the tool naming form
+(12B.9 adopts `orders_my_list` over the sketched `get_my_orders`, with the
+reason), and the fact that customer tools carry no permission key because
+all 23 existing keys mean "any record" rather than "my record" (12B.4).
 
 Modules 34, 35 remain FUTURE PHASE and are out of the current commercial
 plan.
