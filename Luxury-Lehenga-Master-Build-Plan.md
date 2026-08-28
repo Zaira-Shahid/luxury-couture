@@ -2455,23 +2455,21 @@ groups: `products_list`, `products_get`, `products_update`,
 One convention, no mixing. A new tool that does not fit an existing domain
 prefix needs a new domain folder, not a new naming style.
 
-**Customer tools: `<domain>_my_<action>`.** `orders_my_list`,
+**Customer tools: `<domain>_my_<action>` (DECIDED).** Approved by the
+developer on 28 August 2026, at the same time as the Module 44 number.
+`orders_my_list`,
 `orders_my_get`, `measurements_my_list`, `addresses_my_list`,
 `quotations_my_list`, `appointments_my_list`, `loyalty_my_balance`,
 `notifications_my_list`.
 
-The scope instruction that authorised these sketched them as
-`get_my_orders`, `get_my_addresses` and so on. That form is recorded here
-and NOT adopted, because it is verb-first and would break the domain-first
-sort this section already fixed as DECIDED — `get_my_orders` and
-`orders_list` would sit in different places in `tools/list` while
-describing the same domain. The `_my_` infix carries the same meaning and
-keeps one convention: an assistant reading the tool list sees every orders
-tool together, with the self-scoped one visibly marked.
-
-If the developer prefers the original `get_my_*` form, it is a one-line
-change per tool and should be settled before Module 44 is built, not
-after.
+Rejected alternative, recorded so it is not re-proposed: the scope
+instruction that authorised these sketched them as `get_my_orders`,
+`get_my_addresses` and so on. Verb-first breaks the domain-first sort this
+section already fixed as DECIDED — `get_my_orders` and `orders_list` would
+sit in different places in `tools/list` while describing the same domain.
+The `_my_` infix carries the same meaning and keeps one convention: an
+assistant reading the tool list sees every orders tool together, with the
+self-scoped one visibly marked.
 
 ## 12B.10 Directory structure
 
@@ -2660,6 +2658,10 @@ renumbered 38-43 after they were already written down, and a module number
 that moves is worse than one that sits out of build order. Build order is
 stated per module; 44 is buildable as soon as 37 is done.
 
+DECIDED, 28 August 2026: the developer approved the number 44 and the
+dependency order — Module 37 is built first, then 44 reuses its read-tool
+patterns. 44 is not to be started before 37 is complete.
+
 ---
 
 # MODULE 36 — MCP FOUNDATION, TRANSPORT & TOOL REGISTRY
@@ -2760,12 +2762,16 @@ adapter over the same registry for external Claude clients.
 
 Status: [ ] NOT STARTED
 
-Build order: after Module 37, not after Module 43. It is numbered last only
-because renumbering an existing module is not allowed (see above). It
-depends on Module 36 (registry, transport, authorization, error model),
-Module 37 (the read-tool patterns — result envelope, pagination, the
-read-tool test shape) and Module 23 (the storefront chatbot). It does NOT
-depend on Modules 38-43.
+Build order (DECIDED, 28 August 2026): after Module 37, not after Module
+43. It is numbered last only because renumbering an existing module is not
+allowed (see above). It depends on Module 36 (registry, transport,
+authorization, error model), Module 37 (the read-tool patterns — result
+envelope, pagination, the read-tool test shape) and Module 23 (the
+storefront chatbot). It does NOT depend on Modules 38-43.
+
+Module 37 is therefore the next MCP module to build, and 44 must not be
+started before 37 is complete — the whole point of the ordering is that 44
+reuses 37's patterns rather than inventing a parallel set.
 
 The first `audience: "customer"` tools. Read-only. Governed by 12B.16,
 which is binding and not restated here.
@@ -3669,11 +3675,21 @@ Outstanding, in two independent tracks:
 Scope extension recorded, not built: MCP now serves customers as well as
 staff. The architecture is documented in 12B.1, 12B.2, 12B.4, 12B.9,
 12B.10 and 12B.16, and scheduled as Module 44. No code has been written
-for it and none should be until the developer gives the go-ahead. Two
-points in that documentation need a decision first: the tool naming form
-(12B.9 adopts `orders_my_list` over the sketched `get_my_orders`, with the
-reason), and the fact that customer tools carry no permission key because
-all 23 existing keys mean "any record" rather than "my record" (12B.4).
+for it.
+
+Both open questions are now settled, approved by the developer on
+28 August 2026 and marked DECIDED in place:
+
+- Naming: `<domain>_my_<action>` — `orders_my_list`, not `get_my_orders`
+  (12B.9).
+- Number and order: Module 44, built after Module 37 so it reuses 37's
+  read-tool patterns (12C).
+
+One consequence of the scope extension is recorded rather than decided:
+customer tools carry no permission key, because all 23 existing keys mean
+"any record" rather than "my record" (12B.4).
+
+`MODULE 37 — MCP READ TOOLS` is the next MCP module to build.
 
 Modules 34, 35 remain FUTURE PHASE and are out of the current commercial
 plan.
