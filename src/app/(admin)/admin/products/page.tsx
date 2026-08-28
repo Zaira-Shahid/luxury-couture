@@ -4,19 +4,12 @@ import Link from "next/link";
 import { DeleteButton } from "@/components/admin/delete-button";
 import { Button } from "@/components/ui/button";
 import { deleteProduct } from "@/features/admin-catalog/actions";
-import { createClient } from "@/lib/supabase/server";
-import type { Product } from "@/types/database";
+import { getAdminProducts } from "@/lib/catalog/get-admin-catalog";
 
 export const metadata: Metadata = { title: "Admin — Products" };
 
-async function getAllProducts(): Promise<Product[]> {
-  const supabase = await createClient();
-  const { data } = await supabase.from("products").select("*").order("created_at", { ascending: false });
-  return (data ?? []) as Product[];
-}
-
 export default async function AdminProductsPage() {
-  const products = await getAllProducts();
+  const products = await getAdminProducts();
 
   return (
     <div className="container py-10">

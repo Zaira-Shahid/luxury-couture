@@ -1,5 +1,10 @@
 import { buildRegistry } from "../registry";
 
+import { catalogTools } from "./catalog";
+import { customerTools } from "./customers";
+import { enquiryTools } from "./enquiries";
+import { orderTools } from "./orders";
+import { productionTools } from "./production";
 import { systemTools } from "./system";
 
 /**
@@ -19,10 +24,17 @@ import { systemTools } from "./system";
  *
  * Roadmap (Master Build Plan 12C):
  *   Module 37 — read tools:   products, collections, orders, enquiries,
- *                             customers, production, builder options
+ *                             customers, production, builder options [DONE]
  *   Module 38 — write tools:  products, collections, builder options
  *   Module 39 — orders and production status
  *   Module 40 — content and SEO
  *   Module 41 — analytics summaries
  */
-export const toolRegistry = buildRegistry([...systemTools]);
+export const toolRegistry = buildRegistry([
+  ...systemTools,
+  ...catalogTools,
+  ...orderTools,
+  ...enquiryTools,
+  ...customerTools,
+  ...productionTools,
+]);

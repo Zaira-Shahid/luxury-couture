@@ -2514,8 +2514,52 @@ than reimplementing the mutation — the validation, the business rules and
 the revalidation must not be able to drift apart.
 
 If a tool ever genuinely needs privileged access, it must be documented
-here with the reason and confined to that one operation. As of Module 36 no
-tool does.
+here with the reason and confined to that one operation.
+
+**The one privileged read, as of Module 37: `customers_get`.**
+
+`getAdminCustomerDetail()` fetches the customer's email address through
+the service-role client, because email lives in `auth.users` and no
+RLS-respecting query can reach it. Approved by the developer before
+Module 37 was built, and bounded four ways:
+
+- **One field.** The email address, and nothing else. Every other field
+  in that record — profile, orders, quotations, addresses, loyalty,
+  referrals — is read under the caller's own client and refused by RLS if
+  they may not see it.
+- **After the caller was already granted the record.** The profile row is
+  fetched under the caller's RLS FIRST, and a caller who may not see this
+  customer gets nothing back before the elevation is reached.
+- **Behind the same permission as the page.** `customers.read`, which
+  `/admin/customers` already requires. The tool exposes exactly what the
+  admin customer page exposes to the same person.
+- **Nowhere else.** No other tool in Module 37 touches the service-role
+  client, and `customers_search` returns no contact details at all —
+  searching for a customer and reading their file are different acts.
+
+Rejected alternative: omitting email from the tool. It would keep "no MCP
+tool holds privileged access" absolutely true, at the cost of a tool that
+returns less than the page it mirrors, and an assistant unable to answer
+"what is this customer's email?" — weaker without being safer.
+
+### Reader options (Module 37)
+
+Readers in `src/lib/<domain>/` now take an optional `ReaderOptions`
+(`src/lib/supabase/reader.ts`). It exists because a reader serves two
+callers with opposite requirements, and Module 37 was where they collided:
+
+- `client` — the Supabase client to query with. MCP passes the CALLER'S
+  client. This is not a nicety: readers build their own from request
+  COOKIES when none is given, and an MCP call over the Bearer transport
+  carries no auth cookie, so a reader left to itself would query
+  anonymously, RLS would filter every row, and the tool would answer "no
+  orders" to a super-admin. A silent wrong answer is worse than a refusal.
+- `throwOnError` — turn a swallowed query failure back into an error.
+  Readers log and return `[]` so a page degrades gracefully; a tool must
+  not, or an assistant relays "you have no pending orders" as fact when
+  the query broke. See 12B.8.
+
+Pages pass neither and behave exactly as they did.
 
 ## 12B.12 AI-generated content
 
@@ -2536,12 +2580,21 @@ invalid input, unauthenticated access, wrong-role access, business-rule
 violations and failure handling — with the negative half carrying the
 weight, as in Module 26.
 
-## 12B.14 Known limitations (as of Module 36)
+## 12B.14 Known limitations (as of Module 37)
 
-- Only the system tools exist. No domain tools yet; they arrive per module.
+- Seventeen tools exist: the three system tools (Module 36) and the
+  fourteen read tools (Module 37). No write tool exists yet; the first
+  arrive with Module 38.
 - No customer-facing tools exist. The customer audience is SPECIFIED in
   12B.16 and scheduled as Module 44; nothing in it is built, and every
-  registered tool today is `audience: "admin"`.
+  registered tool today is admin-audience.
+- Read tools page in memory. `paginate()` slices a full reader result
+  rather than pushing `limit`/`offset` into the query, because the readers
+  are shared with pages that need the whole set and several compute
+  aggregates across every row first. Correct and bounded at this scale; a
+  catalogue in the tens of thousands would want the cap pushed into SQL.
+- `customers_search` matches on name only. There is no email search,
+  because `customers_search` deliberately returns no contact details.
 - No streaming, no MCP resources, no prompts, no sampling — `tools/*` only.
 - Confirmation tokens are stateless, so a token is single-action but not
   single-USE: within its 5-minute TTL the same token could execute the same
@@ -2697,15 +2750,53 @@ set from 12B.13.
 
 # MODULE 37 — MCP READ TOOLS
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
 
-Read-only tools over catalogue, orders, enquiries, production, customers and
-builder options. Each gated by its existing permission key. No writes.
+Fourteen read-only tools over catalogue, orders, enquiries, production,
+customers and builder options. Each gated by its existing permission key.
+No writes.
 
-Expected: `products_list`, `products_get`, `collections_list`,
-`collections_get`, `orders_list`, `orders_get`, `enquiries_list`,
-`enquiries_get`, `customers_search`, `customers_get`,
-`production_list`, `production_get`, plus the builder option readers.
+Shipped: `products_list`, `products_get`, `collections_list`,
+`collections_get`, `builder_options_list`, `builder_options_get`,
+`orders_list`, `orders_get`, `enquiries_list`, `enquiries_get`,
+`customers_search`, `customers_get`, `production_list`, `production_get`.
+
+**The permission rule: a tool takes the permission its admin page takes.**
+`catalog.read` for products, collections and builder options;
+`orders.read`; `enquiries.read`; `customers.read`; `production.read`. No
+new key was invented, because MCP is a second doorway to a capability the
+platform already models.
+
+Three defects were found by inspection before any tool was written, and
+closing them was most of the module:
+
+1. **Every reader ignored the caller's client.** They call `createClient()`
+   internally, which reads COOKIES, while MCP's actor may arrive over the
+   Bearer transport with no cookie. Left alone, `orders_list` would have
+   answered "no orders" to a super-admin — a silent wrong answer, and the
+   worst failure mode available. Fixed by `ReaderOptions.client` (12B.11),
+   and guarded by a transport-parity test that calls every tool over BOTH
+   transports and compares totals.
+2. **Readers swallowed errors and returned `[]`.** Correct for a page,
+   forbidden for a tool by 12B.8. Fixed by `ReaderOptions.throwOnError`;
+   the thrown `PostgrestError` is mapped by the existing `toMcpError()`,
+   so 42501 reads as FORBIDDEN and nothing else leaks.
+3. **Admin products and collections had no reader at all** — both were
+   queried inline in their page components. Extracted to
+   `src/lib/catalog/get-admin-catalog.ts` and used by BOTH the pages and
+   the tools, rather than copying the queries into handlers (12B.11).
+
+Also in this module: `_list` tools cap results (default 20, max 100,
+`{ items, total, offset, limit, hasMore }`), because the readers return
+everything and an unbounded result goes into a model's context window.
+`builder_options_*` takes a closed enum of business names — `fabric`,
+`embroidery`, `colour`, `sleeve`, `neckline`, `dupatta` — mapped to tables
+inside the tool, so no table name is ever an argument (12B.15).
+
+Tests: `scripts/test-mcp-read.mjs`, 245 checks. The weight is on transport
+parity, on every tool being refused for every role lacking its key, on a
+customer reaching none of the fourteen, and on a missing record returning
+NOT_FOUND rather than an empty success.
 
 # MODULE 38 — MCP WRITE TOOLS & CONFIRMATION WORKFLOW
 
@@ -2769,9 +2860,10 @@ authorization, error model), Module 37 (the read-tool patterns — result
 envelope, pagination, the read-tool test shape) and Module 23 (the
 storefront chatbot). It does NOT depend on Modules 38-43.
 
-Module 37 is therefore the next MCP module to build, and 44 must not be
-started before 37 is complete — the whole point of the ordering is that 44
-reuses 37's patterns rather than inventing a parallel set.
+Module 37 is COMPLETE as of this revision, so 44 is unblocked. Its
+read-tool patterns — `ReaderOptions` for the caller's client, `paginate()`
+for result caps, and the transport-parity test shape — are what 44 reuses
+rather than inventing a parallel set.
 
 The first `audience: "customer"` tools. Read-only. Governed by 12B.16,
 which is binding and not restated here.
@@ -3658,19 +3750,20 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULES 0-31 COMPLETE` + `MODULE 36 COMPLETE`
+`MODULES 0-31 COMPLETE` + `MODULES 36-37 COMPLETE`
 
 Current Module:
 
-`MODULE 36 — MCP FOUNDATION, TRANSPORT & TOOL REGISTRY — COMPLETE`
+`MODULE 37 — MCP READ TOOLS — COMPLETE`
 
 Outstanding, in two independent tracks:
 
 - Deployment track: `MODULE 32 — PRODUCTION DEPLOYMENT` (not started),
   then `MODULE 33 — PRODUCTION READINESS & HANDOVER`.
-- MCP track (Phase 6, see section 12B/12C): `MODULE 37 — MCP READ TOOLS`
-  (not started), then 38-43, plus `MODULE 44 — MCP CUSTOMER SELF-SERVICE
-  READ TOOLS` (not started), which is buildable straight after 37.
+- MCP track (Phase 6, see section 12B/12C): `MODULE 38 — MCP WRITE TOOLS &
+  CONFIRMATION WORKFLOW` (not started), then 39-43. `MODULE 44 — MCP
+  CUSTOMER SELF-SERVICE READ TOOLS` (not started) is now unblocked, since
+  Module 37 is complete and its read-tool patterns exist to reuse.
 
 Scope extension recorded, not built: MCP now serves customers as well as
 staff. The architecture is documented in 12B.1, 12B.2, 12B.4, 12B.9,
@@ -3689,7 +3782,9 @@ One consequence of the scope extension is recorded rather than decided:
 customer tools carry no permission key, because all 23 existing keys mean
 "any record" rather than "my record" (12B.4).
 
-`MODULE 37 — MCP READ TOOLS` is the next MCP module to build.
+Module 37 is complete. `MODULE 38 — MCP WRITE TOOLS` and `MODULE 44 — MCP
+CUSTOMER SELF-SERVICE READ TOOLS` are both now buildable; 44 is no longer
+blocked.
 
 Modules 34, 35 remain FUTURE PHASE and are out of the current commercial
 plan.
@@ -3720,4 +3815,5 @@ stylesheet.
 
 Next Action:
 
-`Start Module 37` (MCP track) or `Start Module 32` (deployment track)
+`Start Module 38` or `Start Module 44` (MCP track), or `Start Module 32`
+(deployment track)

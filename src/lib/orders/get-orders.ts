@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { readFailed, readerClient, type ReaderOptions } from "@/lib/supabase/reader";
 import { logger } from "@/lib/logger";
 import type {
   Address,
@@ -54,17 +55,14 @@ export async function getMyOrders(): Promise<Order[]> {
 }
 
 /** Admin-only: every order. */
-export async function getAdminOrders(): Promise<AdminOrder[]> {
-  const supabase = await createClient();
+export async function getAdminOrders(options?: ReaderOptions): Promise<AdminOrder[]> {
+  const supabase = await readerClient(options);
   const { data, error } = await supabase
     .from("orders")
     .select("*, profiles(full_name)")
     .order("created_at", { ascending: false });
 
-  if (error) {
-    logger.warn("failed to load admin orders", { message: error.message });
-    return [];
-  }
+  if (error) return readFailed(error, options, [], "failed to load admin orders");
   return (data ?? []) as unknown as AdminOrder[];
 }
 
@@ -76,8 +74,11 @@ export async function getAdminOrders(): Promise<AdminOrder[]> {
  * both (at most one row) and this avoids any ambiguity in how PostgREST
  * would serialize a to-one embedded relation.
  */
-export async function getOrderDetail(id: string): Promise<OrderDetail | null> {
-  const supabase = await createClient();
+export async function getOrderDetail(
+  id: string,
+  options?: ReaderOptions
+): Promise<OrderDetail | null> {
+  const supabase = await readerClient(options);
 
   const [orderResult, itemsResult, paymentsResult, historyResult, productionResult, shippingResult] =
     await Promise.all([
@@ -89,7 +90,13 @@ export async function getOrderDetail(id: string): Promise<OrderDetail | null> {
       supabase.from("shipping_orders").select("*").eq("order_id", id).maybeSingle(),
     ]);
 
-  if (orderResult.error || !orderResult.data) return null;
+  if (orderResult.error || !orderResult.data) {
+    // A missing row is not a failure — .single() reports PGRST116 for
+    // "no rows", which a tool must surface as NOT_FOUND rather than as an
+    // internal fault, and which a page renders as its own 404.
+    if (orderResult.error && options?.throwOnError) throw orderResult.error;
+    return null;
+  }
   const order = orderResult.data as Order;
 
   const addressResult = order.shipping_address_id
@@ -124,10 +131,13 @@ export async function getOrderDetail(id: string): Promise<OrderDetail | null> {
 }
 
 /** Admin-only: order detail plus the customer's name and private internal notes. */
-export async function getAdminOrderDetail(id: string): Promise<AdminOrderDetail | null> {
-  const supabase = await createClient();
+export async function getAdminOrderDetail(
+  id: string,
+  options?: ReaderOptions
+): Promise<AdminOrderDetail | null> {
+  const supabase = await readerClient(options);
   const [detail, profileResult, notesResult] = await Promise.all([
-    getOrderDetail(id),
+    getOrderDetail(id, options),
     supabase.from("orders").select("customer_id").eq("id", id).single(),
     supabase.from("order_notes").select("*").eq("order_id", id).order("created_at", { ascending: false }),
   ]);
