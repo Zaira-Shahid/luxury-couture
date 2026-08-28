@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { cache } from "react";
 
 import { createClient } from "@/lib/supabase/server";
@@ -65,8 +66,27 @@ export const getMyPermissions = cache(async (): Promise<Set<string>> => {
     .maybeSingle();
   if (!profile) return new Set();
 
+  return loadPermissionsForRole(supabase, profile.role);
+});
+
+/**
+ * The permission lookup itself, taking the client rather than building one.
+ *
+ * Extracted from `getMyPermissions()` in Module 36 so the MCP layer can
+ * reuse it: an MCP call may authenticate with a Bearer access token rather
+ * than a cookie, so it holds a Supabase client that this file's
+ * `createClient()` cannot produce. Copying the query there instead would
+ * have meant two places where "what does this role hold" is decided — and
+ * the moment they disagree, one of them is a security hole.
+ *
+ * Fails CLOSED, like its caller: any error yields an empty set.
+ */
+export async function loadPermissionsForRole(
+  supabase: SupabaseClient,
+  role: string
+): Promise<Set<string>> {
   // super_admin holds everything implicitly, matching has_permission().
-  if (profile.role === "super_admin") {
+  if (role === "super_admin") {
     const { data: all } = await supabase.from("permissions").select("key");
     return new Set((all ?? []).map((row) => row.key as string));
   }
@@ -74,10 +94,10 @@ export const getMyPermissions = cache(async (): Promise<Set<string>> => {
   const { data: rows } = await supabase
     .from("role_permissions")
     .select("permission_key")
-    .eq("role", profile.role);
+    .eq("role", role);
 
   return new Set((rows ?? []).map((row) => row.permission_key as string));
-});
+}
 
 /** True when the signed-in user holds `permission`. */
 export async function hasPermission(permission: Permission): Promise<boolean> {

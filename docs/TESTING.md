@@ -5,7 +5,7 @@
 | Layer | Where | What it proves |
 | --- | --- | --- |
 | **Unit** | `scripts/unit/*.test.mjs` (54) | Pure logic, no I/O. Run by `node:test`. |
-| **Integration + RLS** | `scripts/test-*.mjs` (36) | Real HTTP, real Supabase sessions, real policies. |
+| **Integration + RLS** | `scripts/test-*.mjs` (37) | Real HTTP, real Supabase sessions, real policies. |
 | **Coverage matrix** | `scripts/test-flows-coverage.mjs` | That each of the 15 critical flows has a named script. |
 | **Regression gate** | `scripts/run-suite.mjs --diff` | That the numbers did not move. |
 
@@ -14,6 +14,28 @@ list is unchanged — which matters in a project that had just removed a 5.4 MB 
 Module 28. `scripts/test-unit.mjs` translates TAP into this project's `PASS —`/`FAIL —` format so
 `run-suite.mjs` counts it natively, rather than teaching that script a second format and risking
 how it counts the other 35.
+
+## `test-mcp.mjs` — a script with two halves (Module 36)
+
+The MCP suite is the one integration script that also unit-tests. Its Part A imports
+`lib/mcp/protocol.ts`, `registry.ts`, `confirm.ts`, `redact.ts` and `result.ts` directly under
+Node's type stripping and asserts the invariants that must hold before any request arrives —
+which is why those five modules were deliberately written free of `@/...` imports, following the
+rule already set by `lib/auth/permissions.ts` and `lib/ai/guardrails.ts`.
+
+Part B then drives the live `/api/mcp` endpoint with real `super_admin`, `admin`, `production`
+and `customer` sessions, over both the cookie and Bearer transports.
+
+**Most of it is negative, and that is the design.** The checks that matter are: an anonymous
+caller refused, a customer refused, a production account refused a tool it was never shown
+(hiding a tool is not the enforcement), twelve shapes of `execute_sql`/`shell`/`read_file`
+answered as unknown tools, and no response containing a key, a Postgres error code or a stack
+trace. A tool layer that grants correctly but revokes nothing reads as protection while providing
+none — the standard Module 26 set.
+
+It lives in `test-*.mjs` rather than `unit/` because the half that proves the security model
+needs a real database, real RLS and real sessions; splitting it would put the two halves of one
+argument in two places.
 
 ## Why the coverage matrix exists
 
