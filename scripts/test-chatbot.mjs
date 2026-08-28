@@ -239,7 +239,11 @@ check(
   (discovery.products ?? []).every((p) => p.slug && typeof p.price === "number")
 );
 
-const noMatch = await chat("show me something in chartreuse", `${session}-d`);
+// The unmatched term is generated rather than hardcoded: this used to
+// ask for "chartreuse", which stopped being an impossible request the
+// moment the demo catalogue gained a chartreuse piece. A run-unique
+// nonsense word can never be a real product.
+const noMatch = await chat(`show me something in zzq${suffix}nope`, `${session}-d`);
 check("an unmatched discovery query invents nothing", (noMatch.products ?? []).length === 0);
 check("and is flagged unanswered so it reaches a human", noMatch.unanswered === true);
 

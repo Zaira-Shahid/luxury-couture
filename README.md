@@ -311,9 +311,10 @@ src/
     supabase/        browser, server and middleware clients
     auth/            session, roles, permissions
     ai/              provider interface, guardrails, query intent
+    mcp/             MCP server, tool registry, authorization, audit
     validations/     Zod schemas for every Server Action
-docs/                twelve documents, one per subsystem
-scripts/             migration runner, 41 test scripts, seeders, verifiers
+docs/                fourteen documents, one per subsystem
+scripts/             migration runner, 42 test scripts, seeders, verifiers
 supabase/migrations/ 62 SQL migrations, applied in filename order
 ```
 
@@ -334,6 +335,8 @@ supabase/migrations/ 62 SQL migrations, applied in filename order
 | [NOTIFICATIONS.md](./docs/NOTIFICATIONS.md) | In-app centre, categories, email preferences |
 | [SETTINGS.md](./docs/SETTINGS.md) | The settings registry and how to add a key |
 | [AI.md](./docs/AI.md) | Guardrails, providers, occasions, recommendations |
+| [MCP.md](./docs/MCP.md) | The AI control layer — tools, authorization, confirmation, audit |
+| [MCP-DECISIONS.md](./docs/MCP-DECISIONS.md) | Why the MCP layer is shaped the way it is |
 | [DEMO-STORE.md](./docs/DEMO-STORE.md) | Seeding, the manifest, and why `--clear` is safe |
 
 ---

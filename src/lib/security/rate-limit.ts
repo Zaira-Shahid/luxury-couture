@@ -68,15 +68,26 @@ async function clientIp(): Promise<string> {
 export async function checkRateLimit(
   scope: string,
   limit: number,
-  friendlyMessage: string
+  friendlyMessage: string,
+  /**
+   * What to count against, when the IP is the wrong unit.
+   *
+   * Added in Module 36 for MCP, where the caller is an authenticated
+   * member of staff: counting by user id rather than by address means one
+   * admin's runaway assistant loop cannot throttle a colleague sharing the
+   * office connection, and cannot be sidestepped by changing address.
+   * Omitted everywhere else, so the public forms keep their IP behaviour
+   * unchanged.
+   */
+  identity?: string
 ): Promise<RateLimitOutcome> {
   try {
-    const ip = await clientIp();
+    const subject = identity ?? (await clientIp());
     // An unresolvable IP would otherwise put every such caller into one
     // shared bucket and throttle them collectively.
-    if (ip === "unknown") return { allowed: true };
+    if (subject === "unknown") return { allowed: true };
 
-    const keyHash = hashKey(scope, ip);
+    const keyHash = hashKey(scope, subject);
     const admin = createAdminClient();
     const now = Date.now();
 

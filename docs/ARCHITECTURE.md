@@ -1454,3 +1454,36 @@ disagree, the database wins.
 
 Full detail, including the `SECURITY DEFINER`/`INVOKER` reasoning and the known limitations, is
 in `docs/PERMISSIONS.md`.
+
+## MCP — the AI application control layer (Module 36)
+
+A second doorway into the same application services, opened for an AI assistant acting on behalf
+of a signed-in member of staff. `POST /api/mcp` speaks JSON-RPC 2.0; `src/lib/mcp/server.ts`
+dispatches; `src/lib/mcp/tools/index.ts` is the registry, one file per domain.
+
+The layering rule is the one that matters: **MCP is a caller of the service layer, never a peer of
+it.** Tool handlers use `src/lib/<domain>/` to read and `src/features/<domain>/actions.ts` to
+write, so validation, business rules and revalidation cannot drift between the admin UI and the
+assistant. There is no second implementation of any mutation.
+
+Two boundaries, deliberately independent:
+
+- **The registry.** Only a registered name is dispatchable, so "what can the AI do" is answered by
+  reading one list. There is no `execute_sql`, no shell, no filesystem, no arbitrary HTTP, and no
+  tool that takes a table name as an argument.
+- **RLS.** Handlers receive the *caller's* Supabase client, not the service-role client, so
+  Postgres refuses anything the signed-in human could not have done through the UI. The
+  service-role client appears on the MCP path only in the audit write and the rate limiter,
+  neither of which takes AI-supplied input.
+
+Authentication reuses the application's Supabase session (cookie or Bearer access token) rather
+than introducing an MCP credential, so the actor is a real person with a real role and the audit
+row names them. Authorization reuses the Module 26 permission keys — no `mcp.*` namespace, because
+a new key would describe a capability the admin UI cannot express.
+
+Five modules of the layer are free of `@/...` imports on purpose (`protocol`, `registry`,
+`confirm`, `redact`, `result`), for the same reason `lib/auth/permissions.ts` is: the test script
+imports them directly under Node's type stripping.
+
+Reasoning per decision is in `docs/MCP-DECISIONS.md`; the working reference is `docs/MCP.md`; the
+authoritative architecture record is section 12B of the Master Build Plan.

@@ -2211,6 +2211,383 @@ During initial development, build interfaces and provider abstractions only.
 
 ---
 
+# 12B. MCP / AI APPLICATION CONTROL LAYER
+
+Added after Module 31, on the developer's instruction, as a permanent part
+of the platform architecture — not a side experiment. This section is the
+source of truth for what MCP is here, what exists, what does not, and what
+was decided and why.
+
+## 12B.1 Purpose
+
+An authorized administrator gives an instruction in natural language, and
+an AI assistant carries it out inside this application through explicitly
+defined, validated, authorized, audited tools.
+
+> "Add a new bridal lehenga called Royal Rose."
+> "Show me all pending custom orders."
+> "Change the homepage announcement."
+
+The AI decides WHICH approved tool to call and WITH WHAT ARGUMENTS. It
+never decides what the database will accept. Every rule the admin UI
+enforces is enforced identically on the MCP path, because both go through
+the same application services.
+
+## 12B.2 Architecture
+
+```text
+Admin (signed-in, real Supabase session)
+        |
+Admin AI Chat  (Module 42)  /  external MCP client
+        |
+Claude / AI assistant
+        |
+POST /api/mcp          <- JSON-RPC 2.0, MCP wire protocol
+        |
+MCP server (src/lib/mcp/server.ts)
+        |
+Tool registry  ->  tool definition (schema, kind, permission, risk)
+        |
+Zod validation  ->  authorization  ->  confirmation gate
+        |
+Application service (src/lib/<domain>/, src/features/<domain>/actions.ts)
+        |
+Supabase (RLS enforced AS THE CALLER)
+        |
+PostgreSQL / Storage
+```
+
+Two boundaries do the real work and neither is the AI's to cross:
+
+1. **The registry.** A tool that is not registered cannot be called. There
+   is no `execute_sql`, no shell, no filesystem, no arbitrary HTTP, no
+   generic `query(table)`. The transport can only dispatch to a name that
+   exists in the registry.
+2. **RLS.** Tool handlers use the CALLER'S Supabase client, not the
+   service-role client, so Postgres refuses anything the signed-in human
+   could not have done through the admin UI. The service-role client is
+   reachable from exactly two places on the MCP path — the audit write and
+   the rate limiter — both of which already used it before MCP existed and
+   neither of which takes AI-supplied input.
+
+## 12B.3 Authentication (DECIDED)
+
+**Decision: in-app HTTP endpoint carrying the existing Supabase session.**
+Approved by the developer before implementation.
+
+`/api/mcp` lives inside the Next.js application. Identity comes from the
+Supabase auth cookie (browser) or an `Authorization: Bearer <access token>`
+header (a client holding a real user access token). There is no MCP-specific
+credential, no API key, no service account, and no second user store.
+
+The consequence is the point: **the actor is a real human being with a real
+role**, so `has_permission()`, `role_permissions` and all 262 RLS policies
+apply unchanged, and the audit trail names a person rather than a shared
+robot account.
+
+Rejected alternatives, recorded so they are not re-proposed:
+
+- *Local stdio server with a dedicated Supabase service account* — smallest
+  attack surface, but it cannot power the in-dashboard Admin AI Chat that is
+  the actual product goal, and every audit row would name the same shared
+  account instead of the admin who asked.
+- *Both transports at once* — correct eventually, twice the security surface
+  to test in the foundation module. A stdio adapter over the same registry
+  remains open for Module 43 if an external Claude client is wanted.
+
+## 12B.4 Authorization
+
+Server-side, always, and never by hiding a tool.
+
+Every tool definition declares a `permission` from the existing 23-key
+catalogue in `src/lib/auth/permissions.ts`. No new role and no new
+permission key was invented for MCP — MCP is a second doorway to
+capabilities the platform already models, so a new key would mean a
+capability the admin UI cannot express.
+
+Three checks run in order on every `tools/call`:
+
+1. **Authenticated?** No session -> `UNAUTHORIZED`.
+2. **Admin role?** A `customer` reaches no MCP tool at all -> `FORBIDDEN`.
+3. **Holds the tool's permission?** Read from the DATABASE
+   (`role_permissions`), not the code mirror -> `FORBIDDEN`.
+
+`tools/list` is filtered by the same permissions, so an assistant acting
+for a Production account is never even told that `payments_refund` exists.
+That filtering is a **usability** measure, not the enforcement: step 3 runs
+on the call regardless of what was listed, because a client can call a name
+it was never shown.
+
+Fails closed everywhere. A failed permission lookup reads as "refused".
+
+## 12B.5 Read tools vs write tools
+
+Every tool declares `kind: "read" | "write"`.
+
+- **read** — retrieves. Never mutates. Not audited to `audit_logs` (the
+  application log records the call; a read log would be a second copy of
+  the database and nobody would read it).
+- **write** — mutates application state. Always audited. May require
+  confirmation.
+
+The distinction is structural, not a naming convention: the dispatcher
+routes on it, and a `read` tool that writes is a bug the registry test
+cannot catch — which is why write access is additionally bounded by RLS
+under the caller's own identity.
+
+## 12B.6 Risk levels and the confirmation rule
+
+Every tool declares `risk: "low" | "medium" | "high"`.
+
+**high** means the action must not happen merely because the AI interpreted
+a sentence. A high-risk call arrives WITHOUT confirmation and does not
+execute; it returns a confirmation requirement describing exactly what
+would change, including the number of affected records, plus a signed
+`confirmationToken`. The caller must call again with that token to execute.
+
+The token is an HMAC over the tool name, the canonical arguments and the
+actor id, with a 5-minute TTL. It is stateless (no table) and it is bound to
+all three, so a token cannot be replayed against different arguments, a
+different tool, or by a different user. Confirming is therefore confirming
+*that exact action*, not "yes" in the abstract.
+
+High-risk by rule (implemented as each tool arrives):
+
+- deleting or archiving products; bulk updates or bulk deletion
+- deleting customer data; modifying sensitive customer information
+- refunds; any change to payment status
+- changing a final quotation, order totals, or cancelling an order
+- changing production-critical information
+- changing admin permissions or roles
+- publishing major content changes
+
+## 12B.7 Audit logging
+
+Every write tool call is written to the existing `audit_logs` table through
+`logAudit()` — the same table and the same helper the admin UI uses, so one
+query answers "who changed this" regardless of which doorway was used.
+
+Recorded: actor id, `action` as `mcp.<tool_name>`, entity type, entity id,
+a redacted input summary, and the outcome. Failures are recorded too — a
+log that only contains successes cannot answer "what did it try to do".
+
+Never recorded: secrets, tokens, raw credentials, or customer personal data
+beyond the identifiers already present in the entity columns.
+
+Audit writes never throw, per the existing helper's contract.
+
+## 12B.8 Error model
+
+Tools return controlled errors from a fixed set, with a message safe to
+show a human:
+
+```text
+UNAUTHORIZED  FORBIDDEN  NOT_FOUND  VALIDATION_ERROR  CONFLICT
+BUSINESS_RULE_ERROR  CONFIRMATION_REQUIRED  RATE_LIMITED
+INTEGRATION_ERROR  INTERNAL_ERROR
+```
+
+Stack traces, SQL text, Postgres error codes, table names, environment
+variables and internal URLs never reach the AI or the user. They go to the
+server log. An unrecognised exception becomes `INTERNAL_ERROR` with a
+generic message — the mapping is deny-by-default, so a new failure mode
+cannot leak by being unhandled.
+
+Never report success for an operation that failed.
+
+## 12B.9 Tool naming convention (DECIDED)
+
+`<domain>_<action>`, lower snake case, domain first so tools sort into
+groups: `products_list`, `products_get`, `products_update`,
+`orders_update_status`, `production_update_status`,
+`content_update_announcement`.
+
+One convention, no mixing. A new tool that does not fit an existing domain
+prefix needs a new domain folder, not a new naming style.
+
+## 12B.10 Directory structure
+
+Chosen after inspecting the existing tree; it follows the established
+`src/lib/<domain>/` convention rather than the generic layout suggested in
+the MCP instruction.
+
+```text
+src/lib/mcp/
+  protocol.ts     MCP/JSON-RPC wire types and the protocol version
+  errors.ts       McpError, the code catalogue, safe error mapping
+  registry.ts     ToolDefinition, registration, lookup, permission filter
+  context.ts      McpContext — the actor and their Supabase client
+  auth.ts         actor resolution + the three authorization checks
+  audit.ts        write-tool audit + redaction
+  confirm.ts      HMAC confirmation tokens for high-risk actions
+  result.ts       the structured result envelope
+  server.ts       JSON-RPC dispatch (initialize, tools/list, tools/call)
+  tools/
+    index.ts      assembles the registry from the domain modules
+    system.ts     system_ping, system_whoami, system_diagnostics
+    <domain>.ts   one file per domain, added by its own module
+src/app/api/mcp/route.ts
+```
+
+One file per domain. No single file containing every tool.
+
+## 12B.11 Business-logic rule
+
+MCP must NOT create a second business-logic system. Tools call the same
+readers in `src/lib/<domain>/` and the same writers in
+`src/features/<domain>/actions.ts` that the admin UI calls. Where a Server
+Action's signature is `FormData`-shaped, the tool builds the FormData rather
+than reimplementing the mutation — the validation, the business rules and
+the revalidation must not be able to drift apart.
+
+If a tool ever genuinely needs privileged access, it must be documented
+here with the reason and confined to that one operation. As of Module 36 no
+tool does.
+
+## 12B.12 AI-generated content
+
+Content that an AI drafted is marked as AI-generated and follows
+draft -> review -> approve -> publish. Automatic publication of AI-written
+copy is not permitted unless this plan is amended to allow it for a named
+surface. AI-generated content is never presented as human-authored.
+
+## 12B.13 Development workflow
+
+Identical to every other module:
+
+`Plan -> Implement -> Test -> Security test -> Document -> Update this plan
+-> git add -> commit -> push -> verify -> mark COMPLETE`
+
+An MCP module is not complete until its tools are tested for valid input,
+invalid input, unauthenticated access, wrong-role access, business-rule
+violations and failure handling — with the negative half carrying the
+weight, as in Module 26.
+
+## 12B.14 Known limitations (as of Module 36)
+
+- Only the system tools exist. No domain tools yet; they arrive per module.
+- No streaming, no MCP resources, no prompts, no sampling — `tools/*` only.
+- Confirmation tokens are stateless, so a token is single-action but not
+  single-USE: within its 5-minute TTL the same token could execute the same
+  action twice. A replay ledger arrives with Module 38, where the first
+  destructive tools do.
+- The endpoint is session-bound, so an external MCP client must supply a
+  real user access token. No stdio transport (see 12B.3).
+- Rate limiting is per-actor and table-backed; it throttles a runaway loop,
+  it is not a defence against a distributed attack.
+
+## 12B.15 Not permitted, permanently
+
+No `execute_sql`. No shell execution. No filesystem access. No arbitrary
+HTTP. No unrestricted Supabase access. No exposure of the service-role key
+to the browser or to any model. No tool that takes a table name as an
+argument.
+
+---
+
+# 12C. PHASE 6 — MCP MODULE ROADMAP
+
+Appended as Modules 36-43. Modules 0-35 are unchanged and unrenumbered;
+document order is not build order, so Phase 6 may run before Modules 32-33.
+
+---
+
+# MODULE 36 — MCP FOUNDATION, TRANSPORT & TOOL REGISTRY
+
+Status: [x] COMPLETE
+
+Delivers the bridge itself and nothing that belongs to a later module.
+
+- `/api/mcp` speaking JSON-RPC 2.0: `initialize`, `notifications/initialized`,
+  `ping`, `tools/list`, `tools/call`.
+- The tool registry, the `ToolDefinition` contract, and Zod -> JSON Schema
+  generation so a tool's advertised schema and its validation cannot drift.
+- Actor resolution and the three authorization checks (12B.4).
+- The controlled error catalogue and safe mapping (12B.8).
+- Write-tool audit logging with redaction (12B.7).
+- HMAC confirmation tokens for high-risk actions (12B.6).
+- Per-actor rate limiting, reusing `checkRateLimit` with an identity key.
+- Three system tools proving the pipeline end to end: `system_ping`,
+  `system_whoami`, `system_diagnostics`.
+
+DELIBERATE SCOPE DEVIATION, recorded rather than done silently: the
+questionnaire that authorised Phase 6 sketched authentication as a separate
+module. It is implemented here instead, because an MCP endpoint that ships
+before its authorization layer is a hole in production for the length of one
+module. Module 37 therefore covers the read-tool surface rather than auth.
+
+No migration. `audit_logs` (0012) and `chat_rate_limits` (0049) already
+exist and are reused.
+
+Tests: `scripts/test-mcp.mjs` — protocol, registry, validation, the
+authorization matrix across real signed-in roles, and the negative security
+set from 12B.13.
+
+# MODULE 37 — MCP READ TOOLS
+
+Status: [ ] NOT STARTED
+
+Read-only tools over catalogue, orders, enquiries, production, customers and
+builder options. Each gated by its existing permission key. No writes.
+
+Expected: `products_list`, `products_get`, `collections_list`,
+`collections_get`, `orders_list`, `orders_get`, `enquiries_list`,
+`enquiries_get`, `customers_search`, `customers_get`,
+`production_list`, `production_get`, plus the builder option readers.
+
+# MODULE 38 — MCP WRITE TOOLS & CONFIRMATION WORKFLOW
+
+Status: [ ] NOT STARTED
+
+The first mutating tools, through the existing Server Actions:
+`products_create`, `products_update`, `products_archive`,
+`collections_create`, `collections_update`, and the builder option writers.
+Adds the confirmation replay ledger noted in 12B.14.
+
+# MODULE 39 — MCP ORDER & PRODUCTION TOOLS
+
+Status: [ ] NOT STARTED
+
+`orders_update_status`, `production_update_status`,
+`production_update_qc_status`, `enquiries_update_status`. Status transitions
+must go through the existing workflow validation — no tool may invent a
+transition the application does not already permit. Payment status and
+refunds stay out of MCP until explicitly authorised.
+
+# MODULE 40 — MCP CONTENT & SEO TOOLS
+
+Status: [ ] NOT STARTED
+
+`content_get_homepage`, `content_update_announcement`, `seo_get_settings`,
+`seo_update_settings`, `seo_update_product`, and AI drafting that obeys the
+draft -> review -> approve -> publish rule in 12B.12.
+
+# MODULE 41 — MCP ANALYTICS & REPORTING TOOLS
+
+Status: [ ] NOT STARTED
+
+`analytics_sales_summary`, `analytics_order_summary`,
+`analytics_customer_summary`, `orders_pending_summary`. Aggregates only —
+no tool returns a customer list as an analytics result.
+
+# MODULE 42 — ADMIN AI CHAT INTERFACE
+
+Status: [ ] NOT STARTED
+
+The in-dashboard chat that drives the MCP tools, including the human
+confirmation step for high-risk actions and a plain-language rendering of
+tool results. Do not build before this module.
+
+# MODULE 43 — MCP PRODUCTION HARDENING & OBSERVABILITY
+
+Status: [ ] NOT STARTED
+
+Tool-call metrics, authorization-failure visibility in Admin, an MCP section
+in the security audit, load and abuse testing, and — if wanted — a stdio
+adapter over the same registry for external Claude clients.
+
+---
+
 # 13. HOW EACH CLAUDE CODE CHAT MUST WORK
 
 When the developer opens a new chat, they will say:
@@ -3067,12 +3444,46 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULE 31 COMPLETE`
+`MODULES 0-31 COMPLETE` + `MODULE 36 COMPLETE`
 
 Current Module:
 
-`MODULE 31 — COMPLETE`
+`MODULE 36 — MCP FOUNDATION, TRANSPORT & TOOL REGISTRY — COMPLETE`
+
+Outstanding, in two independent tracks:
+
+- Deployment track: `MODULE 32 — PRODUCTION DEPLOYMENT` (not started),
+  then `MODULE 33 — PRODUCTION READINESS & HANDOVER`.
+- MCP track (Phase 6, see section 12B/12C): `MODULE 37 — MCP READ TOOLS`
+  (not started), then 38-43.
+
+Modules 34, 35 remain FUTURE PHASE and are out of the current commercial
+plan.
+
+Suite housekeeping after Module 36: three scripts were failing on stale
+assertions rather than on broken behaviour, and are fixed rather than
+muted.
+
+- `verify-rls.mjs` and `test-settings-pass1.mjs` asserted that
+  `site_settings` is unreadable by anonymous visitors. Migration 0019
+  (Module 3) deliberately made it public-read, because branding, theme and
+  the SEO defaults have to render for every visitor. The assertions only
+  ever passed because the table held no rows; the homepage imagery keys
+  added in the catalogue work put four rows in and exposed them. They now
+  assert what actually protects anything: the table carries no
+  credential-shaped keys, a signed-in customer sees no more rows than an
+  anonymous one, and neither can write.
+- `test-chatbot.mjs` proved "an unmatched discovery query invents nothing"
+  by asking for chartreuse — which stopped being an impossible request the
+  moment the demo catalogue gained a chartreuse kurti. The unmatched term
+  is now generated per run, so it can never be a real product.
+
+Note for future suite runs: the suite must be run against a PRODUCTION
+server (`next build` then `next start`), not `next dev`. Three `test-a11y`
+checks read the compiled CSS out of the built page and fail on a dev
+server, where Next injects styles through JavaScript instead of linking a
+stylesheet.
 
 Next Action:
 
-`Start Module 32`
+`Start Module 37` (MCP track) or `Start Module 32` (deployment track)
