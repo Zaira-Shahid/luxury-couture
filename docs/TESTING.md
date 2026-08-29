@@ -35,6 +35,19 @@ concurrent confirmed calls race for one token where exactly one must win), omiss
 deletion (a one-field update must leave the price, the SKU and the photographs standing), and the
 fact that no argument to an editor can reach `status`.
 
+`test-mcp-orders.mjs` (Module 39) adds a third. Its weight sits on rules this project did not
+have before: the order and production pipelines were validated for enum membership and nothing
+else, so a delivered order could be walked back to pending and a garment at finishing could be
+sent to cutting. Most of the script is the negative half of the rules that now exist — every
+backward move, every reopened terminal state, every cancellation of a shipped order — each
+asserted against the row afterwards rather than against the response.
+
+Two of its checks exist to catch this module over-reaching. The admin forms pass
+`allowCorrection: true` and must keep doing so, because an admin correcting a mis-click is
+exactly who should be able to move an order backward; the tools must never pass it. And the QC
+split of migration 0054 is checked in both directions: a `production` account cannot record a
+quality check, a `qc` account cannot move the work.
+
 **Most of it is negative, and that is the design.** The checks that matter are: an anonymous
 caller refused, a customer refused, a production account refused a tool it was never shown
 (hiding a tool is not the enforcement), twelve shapes of `execute_sql`/`shell`/`read_file`

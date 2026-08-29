@@ -85,7 +85,7 @@ rather than partially processed. `GET` returns `405`.
 
 ## The tools
 
-Twenty-eight, added per module (Master Build Plan 12C). Everything the AI
+Thirty-five, added per module (Master Build Plan 12C). Everything the AI
 can do in this application is this list and nothing else.
 
 **System (Module 36)**
@@ -118,6 +118,38 @@ the ADMIN view — drafts and archived rows included.
 | `builder_options_update` | medium | edits one; cannot activate it |
 | `builder_options_activate` | medium | offers it to customers |
 | `builder_options_deactivate` | high | withdraws it; the record and its history stay |
+
+**Write (Module 39)** — seven tools across three domains:
+
+| Tool | Permission | Risk | What it does |
+| --- | --- | --- | --- |
+| `orders_update_status` | `orders.write` | high | moves an order FORWARD; emails the customer |
+| `orders_cancel` | `orders.write` | high | cancels an unshipped order; issues no refund |
+| `orders_add_note` | `orders.write` | medium | internal note; the customer never sees it |
+| `production_advance_status` | `production.write` | medium | moves a job forward through the twelve stages |
+| `production_record_qc` | `qc.write` | medium | records an inspection result; moves nothing |
+| `production_update_details` | `production.write` | medium | team and target date |
+| `enquiries_update_status` | `enquiries.write` | medium | moves an enquiry forward |
+
+**Forward only.** Orders, production jobs and enquiries move down their
+pipeline and never back up. Stages may be SKIPPED, because the business
+skips them — a ready-to-wear piece never enters production. Terminal
+states (`delivered`, `cancelled`, a closed enquiry) cannot be reopened by
+any tool. The rules live in `src/lib/orders/transitions.ts`,
+`src/lib/production/transitions.ts` and
+`src/lib/enquiries/write-enquiries.ts`.
+
+The admin UI is NOT held to these rules — it passes `allowCorrection:
+true` and can still set any status. An admin correcting a mis-click is
+exactly who should be able to move an order backward; an assistant cannot
+tell a mistake from an instruction.
+
+**QC records, production moves, and neither can do the other.** Migration
+0054 gave `qc.write` its own INSERT policy on `production_status_history`
+so a QC user could record a result without moving work. The tools keep
+that split: `production_record_qc` writes a history row at the job's
+current stage and changes no status, and a `production` account cannot
+call it.
 
 Two shapes recur and are deliberate.
 
