@@ -1,5 +1,6 @@
 import { buildRegistry } from "../registry";
 
+import { analyticsTools } from "./analytics";
 import { catalogTools } from "./catalog";
 import { catalogWriteTools } from "./catalog-write";
 import { contentTools } from "./content-write";
@@ -34,7 +35,7 @@ import { systemTools } from "./system";
  *   Module 38 — write tools:  products, collections, builder options [DONE]
  *   Module 39 — orders and production status [DONE]
  *   Module 40 — content and SEO [DONE]
- *   Module 41 — analytics summaries
+ *   Module 41 — analytics summaries [DONE]
  */
 export const toolRegistry = buildRegistry([
   ...systemTools,
@@ -49,4 +50,5 @@ export const toolRegistry = buildRegistry([
   ...productionWriteTools,
   ...contentTools,
   ...seoTools,
+  ...analyticsTools,
 ]);

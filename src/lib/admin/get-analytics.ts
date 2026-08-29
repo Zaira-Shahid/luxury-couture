@@ -1,5 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
-import { logger } from "@/lib/logger";
+import { readFailed, readerClient, type ReaderOptions } from "@/lib/supabase/reader";
+
 import { FUNNEL_STEPS, type AnalyticsEventName } from "@/lib/analytics/events";
 
 /**
@@ -57,57 +57,60 @@ export function resolveRange(daysParam: string | undefined): AnalyticsRange {
   return { from, to, days };
 }
 
-export async function getEventSummary(range: AnalyticsRange): Promise<EventSummaryRow[]> {
-  const supabase = await createClient();
+// ReaderOptions added in Module 41, when the MCP analytics tools became
+// the first caller of these readers that is not a page render. Omitting
+// the argument leaves page behaviour exactly as it was.
+export async function getEventSummary(
+  range: AnalyticsRange,
+  options?: ReaderOptions
+): Promise<EventSummaryRow[]> {
+  const supabase = await readerClient(options);
   const { data, error } = await supabase.rpc("get_analytics_summary", {
     p_from: range.from.toISOString(),
     p_to: range.to.toISOString(),
   });
-  if (error) {
-    logger.warn("analytics summary failed", { message: error.message });
-    return [];
-  }
+  if (error) return readFailed(error, options, [], "analytics summary failed");
   return (data ?? []) as EventSummaryRow[];
 }
 
-export async function getTimeseries(range: AnalyticsRange): Promise<TimeseriesRow[]> {
-  const supabase = await createClient();
+export async function getTimeseries(
+  range: AnalyticsRange,
+  options?: ReaderOptions
+): Promise<TimeseriesRow[]> {
+  const supabase = await readerClient(options);
   const { data, error } = await supabase.rpc("get_analytics_timeseries", {
     p_from: range.from.toISOString(),
     p_to: range.to.toISOString(),
   });
-  if (error) {
-    logger.warn("analytics timeseries failed", { message: error.message });
-    return [];
-  }
+  if (error) return readFailed(error, options, [], "analytics timeseries failed");
   return (data ?? []) as TimeseriesRow[];
 }
 
-export async function getTopViewedProducts(range: AnalyticsRange): Promise<TopProductRow[]> {
-  const supabase = await createClient();
+export async function getTopViewedProducts(
+  range: AnalyticsRange,
+  options?: ReaderOptions
+): Promise<TopProductRow[]> {
+  const supabase = await readerClient(options);
   const { data, error } = await supabase.rpc("get_top_viewed_products", {
     p_from: range.from.toISOString(),
     p_to: range.to.toISOString(),
     p_limit: 10,
   });
-  if (error) {
-    logger.warn("analytics top products failed", { message: error.message });
-    return [];
-  }
+  if (error) return readFailed(error, options, [], "analytics top products failed");
   return (data ?? []) as TopProductRow[];
 }
 
-export async function getRecentEvents(limit = 25): Promise<RecentEvent[]> {
-  const supabase = await createClient();
+export async function getRecentEvents(
+  limit = 25,
+  options?: ReaderOptions
+): Promise<RecentEvent[]> {
+  const supabase = await readerClient(options);
   const { data, error } = await supabase
     .from("analytics_events")
     .select("id, event_name, occurred_at, session_id, profile_id, properties")
     .order("occurred_at", { ascending: false })
     .limit(limit);
-  if (error) {
-    logger.warn("recent analytics events failed", { message: error.message });
-    return [];
-  }
+  if (error) return readFailed(error, options, [], "recent analytics events failed");
   return (data ?? []) as RecentEvent[];
 }
 

@@ -465,3 +465,61 @@ switch one on: `isActive` reaches the service only from the admin form,
 which has always had the checkbox.
 
 *2026-08-29 · Module 40*
+
+
+---
+
+## MCP-020 — Only one "analytics" tool takes `analytics.read`
+
+**Decision.** Module 41's four commercial summaries declare
+`payments.read`, `orders.read` and `customers.read`. Only
+`analytics_events_summary` declares `analytics.read`.
+
+**Reason.** The module's name, and the names the plan gave its tools,
+imply a single analytics permission covers reporting. Migration 0054
+gates `analytics.read` on `analytics_events` and on nothing else. Revenue
+comes from `payments`, order figures from `orders`, customer counts from
+`profiles`, and each of those tables has its own key.
+
+The `marketing` role holds `analytics.read` and holds none of the other
+three. Declaring the obvious key would therefore have listed every
+reporting tool for a marketing account and had Postgres refuse each call
+— MCP-017's failure, reached from a different direction. This is the
+second module in a row where the permission a tool "obviously" wants is
+not the one its data requires.
+
+**Impact.** A fifth tool was added rather than specified.
+`analytics_events_summary` reports the event counts and conversion funnel
+already shown on /admin/analytics; without it, `analytics.read` would
+grant nothing at all through MCP, and the site's actual visitor
+analytics would be the one thing an analytics module could not report.
+
+*2026-08-29 · Module 41*
+
+---
+
+## MCP-021 — "Aggregates only" is enforced in the service, not the tool
+
+**Decision.** `analytics_customer_summary` returns counts obtained with
+head-only queries, so no profile row is ever fetched. The rule lives in
+`lib/analytics/reporting.ts`, not in the tool handler.
+
+**Reason.** The Master Build Plan requires that no tool returns a
+customer list as an analytics result. A handler that fetched rows and
+then mapped them to counts would satisfy that rule today and break it the
+first time somebody added a field to the mapping — the rows would already
+be in memory, one edit away from the response.
+
+`select("id", { count: "exact", head: true })` fetches nothing. There is
+no list to leak rather than a list that is filtered out, and the same
+reasoning gives the sales and order summaries return types with no
+customer id, name or email in them at all.
+
+**Impact.** `test-mcp-analytics.mjs` searches every response for a real
+seeded customer's email and id, and for the order ids it created, rather
+than for a regex describing what an email looks like. Two related
+judgements are asserted alongside it: revenue counts succeeded payments
+only, and a period with no previous activity reports a null change rather
+than a percentage against zero.
+
+*2026-08-29 · Module 41*
