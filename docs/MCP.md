@@ -1,6 +1,6 @@
 # MCP — the AI application control layer
 
-Module 36. The authoritative architecture record is section 12B of
+Modules 36-38. The authoritative architecture record is section 12B of
 `Luxury-Lehenga-Master-Build-Plan.md`; this document is the working
 reference for someone about to add a tool or debug a call.
 
@@ -85,8 +85,10 @@ rather than partially processed. `GET` returns `405`.
 
 ## The tools
 
-Module 36 ships three, all read-only. Domain tools arrive per module
-(Master Build Plan 12C).
+Twenty-eight, added per module (Master Build Plan 12C). Everything the AI
+can do in this application is this list and nothing else.
+
+**System (Module 36)**
 
 | Tool | Permission | What it does |
 | --- | --- | --- |
@@ -94,10 +96,47 @@ Module 36 ships three, all read-only. Domain tools arrive per module
 | `system_whoami` | any admin role | the caller's own id, role and permission list |
 | `system_diagnostics` | `settings.manage` | registry contents and which integrations are configured, as booleans |
 
+**Read (Module 37)** — fourteen tools: `products_list/_get`,
+`collections_list/_get`, `builder_options_list/_get` (`catalog.read`);
+`orders_list/_get` (`orders.read`); `enquiries_list/_get`
+(`enquiries.read`); `customers_search/_get` (`customers.read`);
+`production_list/_get` (`production.read`). All `risk: "low"`, all reading
+the ADMIN view — drafts and archived rows included.
+
+**Write (Module 38)** — eleven tools, all `catalog.write`:
+
+| Tool | Risk | What it does |
+| --- | --- | --- |
+| `products_create` | medium | creates a DRAFT product; cannot publish |
+| `products_update` | medium | edits fields; cannot change status |
+| `products_publish` | high | draft/archived -> published |
+| `products_archive` | high | -> archived; deletes nothing |
+| `collections_create` | medium | creates an INACTIVE collection |
+| `collections_update` | medium | edits fields and membership; cannot change visibility |
+| `collections_set_visibility` | high | shows or hides a collection |
+| `builder_options_create` | medium | adds an INACTIVE builder option |
+| `builder_options_update` | medium | edits one; cannot activate it |
+| `builder_options_activate` | medium | offers it to customers |
+| `builder_options_deactivate` | high | withdraws it; the record and its history stay |
+
+Two shapes recur and are deliberate.
+
+**A status change is never a field on an editor.** Publishing and
+archiving are high-risk under 12B.6 and a description edit is not, and
+`risk` is declared per tool — so they are separate tools. `status` is not
+in the editors' schemas at all, and a call that sends one is a
+`VALIDATION_ERROR`.
+
+**Omitting a field leaves it alone.** The updaters merge onto the stored
+record. `images` and `productIds` omitted means "do not touch"; an
+explicitly empty list is the way to genuinely clear them.
+
 ## Adding a tool
 
 1. Create or open `src/lib/mcp/tools/<domain>.ts`. One file per domain —
-   never one file holding everything.
+   never one file holding everything. A domain may split read from write
+   once it is large enough to need it, as `catalog.ts` /
+   `catalog-write.ts` do.
 2. Export a `ToolDefinition`:
 
 ```ts
@@ -114,11 +153,17 @@ Module 36 ships three, all read-only. Domain tools arrive per module
 ```
 
 3. Append it in `src/lib/mcp/tools/index.ts`.
-4. Call the existing service (`src/lib/<domain>/` to read,
-   `src/features/<domain>/actions.ts` to write) through `ctx.supabase`.
-   Do not write a second implementation of the mutation.
-5. Add tests to `scripts/test-mcp.mjs`, including the negative half: wrong
-   role, missing permission, invalid input.
+4. Call the existing service through `ctx.supabase` — `src/lib/<domain>/`
+   to read, and to write. Do not write a second implementation of the
+   mutation, and do not call the Server Action: an action redirects and
+   revalidates, which only makes sense with a browser on the other end.
+   Where the mutation still lives inside an action, extract it into
+   `src/lib/<domain>/` and have the action call it too (Module 38 did
+   this for the catalogue and builder writers).
+5. Add tests to the module's suite — `test-mcp.mjs`, `test-mcp-read.mjs`
+   or `test-mcp-write.mjs` — including the negative half: wrong role,
+   missing permission, invalid input, and for a write, the database
+   checked afterwards rather than the response believed.
 
 `buildRegistry()` enforces at import time — so a violation fails the build,
 not a production call — that names follow the convention, are unique, that
@@ -143,6 +188,17 @@ permissions, and publishing major content.
 Signed with `MCP_CONFIRMATION_SECRET`, falling back to
 `SUPABASE_SERVICE_ROLE_KEY`. With neither, high-risk actions are refused
 rather than run unconfirmed.
+
+**A token is spent once (Module 38).** The signature check proves an admin
+confirmed this exact action; it does not prove the action has not already
+run, because the token stays verifiable for its whole five minutes. So the
+dispatcher records the token's signature in `mcp_confirmations` BEFORE
+running the handler, and the signature is that table's primary key: two
+concurrent calls carrying the same token cannot both write, and the second
+gets `CONFLICT`. A ledger it cannot reach fails the action closed — "we
+could not check" is not "this is the first time". The table has RLS on
+with no write policy at all, because a ledger an administrator could
+delete from is one they could defeat.
 
 ## Errors
 
@@ -185,22 +241,35 @@ office connection.
 ## Testing
 
 ```
-npm run build && npx next start          # the suite needs a running server
-node --env-file=.env.local scripts/test-mcp.mjs
+npm run build && npx next start          # the suites need a running server
+node --env-file=.env.local scripts/test-mcp.mjs         # 127 — the foundation
+node --env-file=.env.local scripts/test-mcp-read.mjs    # 245 — the read tools
+node --env-file=.env.local scripts/test-mcp-write.mjs   # 239 — the write tools
 ```
 
-124 assertions. Part A unit-tests the protocol parser, registry invariants,
-confirmation tokens, redaction and result envelopes by importing the `.ts`
-modules directly. Part B drives the live endpoint with real signed-in
-`super_admin`, `admin`, `production` and `customer` accounts, over both the
-cookie and Bearer transports.
+Each has the same two halves. Part A asserts invariants at the source —
+the protocol parser, registry rules, confirmation tokens, the reader
+contract, and in `test-mcp-write.mjs` the fact that the dispatcher spends
+a confirmation before it acts. Part B drives the live endpoint with real
+signed-in accounts of every relevant role, over both the cookie and Bearer
+transports.
+
+`test-mcp-write.mjs` is the first suite where a failing assertion means
+data was changed that should not have been, so it checks the DATABASE
+after every write rather than believing the response. Its centre is the
+replay ledger: the same token archives a product once, a second attempt is
+`CONFLICT`, and two concurrent confirmed calls race for one token where
+exactly one must win.
 
 ## Known limitations
 
-- Only system tools exist so far; domain tools arrive per module.
-- A confirmation token is single-ACTION but not single-USE within its
-  5-minute life. The replay ledger lands in Module 38 with the first
-  destructive tool.
+- Catalogue writes only. Orders, production, content, SEO and analytics
+  are readable but not writable; those tools arrive with Modules 39-41.
+- No customer-facing tools. Every registered tool is admin-audience;
+  the customer set is specified in 12B.16 and scheduled as Module 44.
+- Writes are audited but not diffed: the audit row records the request,
+  the outcome and the record touched, not the previous value of every
+  field.
 - No stdio transport, so an external client needs a real user access token.
 - Rate limiting throttles a loop; it is not a defence against a distributed
   attack.

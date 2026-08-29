@@ -26,6 +26,15 @@ rule already set by `lib/auth/permissions.ts` and `lib/ai/guardrails.ts`.
 Part B then drives the live `/api/mcp` endpoint with real `super_admin`, `admin`, `production`
 and `customer` sessions, over both the cookie and Bearer transports.
 
+`test-mcp-read.mjs` (Module 37) and `test-mcp-write.mjs` (Module 38) follow the same two-part
+shape. The write suite is the first in this project where a failing assertion means data was
+CHANGED that should not have been, so it never believes a response: after every write it reads
+the row back through the service-role client. Three things carry its weight — the replay ledger
+(the same confirmation token archives a product once, the second attempt is `CONFLICT`, and two
+concurrent confirmed calls race for one token where exactly one must win), omission-is-not-
+deletion (a one-field update must leave the price, the SKU and the photographs standing), and the
+fact that no argument to an editor can reach `status`.
+
 **Most of it is negative, and that is the design.** The checks that matter are: an anonymous
 caller refused, a customer refused, a production account refused a tool it was never shown
 (hiding a tool is not the enforcement), twelve shapes of `execute_sql`/`shell`/`read_file`
