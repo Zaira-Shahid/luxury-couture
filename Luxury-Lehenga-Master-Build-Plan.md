@@ -2589,13 +2589,20 @@ invalid input, unauthenticated access, wrong-role access, business-rule
 violations and failure handling — with the negative half carrying the
 weight, as in Module 26.
 
-## 12B.14 Known limitations (as of Module 40)
+## 12B.14 Known limitations (as of Module 41)
 
-- Forty-five tools exist: the three system tools (Module 36), the
-  fourteen read tools (Module 37), the eleven catalogue write tools
-  (Module 38), the seven order, production and enquiry write tools
-  (Module 39) and the ten content and SEO tools (Module 40). Analytics
-  has no tool yet; those arrive with Module 41.
+- Fifty tools exist: the three system tools (Module 36), the fourteen
+  read tools (Module 37), the eleven catalogue write tools (Module 38),
+  the seven order, production and enquiry write tools (Module 39), the
+  ten content and SEO tools (Module 40) and the five analytics tools
+  (Module 41). Every tool the MCP roadmap specified through Module 41 now
+  exists.
+- The reporting figures are computed in the application, not in the
+  database. `salesSummary` and `orderSummary` fetch the rows in a window
+  and sum them in JavaScript rather than using an aggregate RPC, which is
+  correct for this catalogue's volume and would not be at ten thousand
+  orders a month. The event summaries already go through RPCs; the
+  commercial ones should follow if the numbers grow.
 - 12B.12's `draft -> review -> approve -> publish` is NOT implemented as
   four states. `blog_posts` and `pages` have two, draft and published.
   Module 40 added the AI-generated MARKING (0064) and enforces "never
@@ -3045,11 +3052,59 @@ Verified by `scripts/test-mcp-content.mjs` — 192 checks.
 
 # MODULE 41 — MCP ANALYTICS & REPORTING TOOLS
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
 
-`analytics_sales_summary`, `analytics_order_summary`,
-`analytics_customer_summary`, `orders_pending_summary`. Aggregates only —
-no tool returns a customer list as an analytics result.
+Five read tools: `analytics_sales_summary`, `analytics_order_summary`,
+`orders_pending_summary`, `analytics_customer_summary` and
+`analytics_events_summary`.
+
+**The module is called "analytics" and only one of its tools may take
+`analytics.read`.** Migration 0054 gates that key on `analytics_events`
+and nothing else. `orders` needs `orders.read`, `payments` needs
+`payments.read`, `profiles` needs `customers.read`. The `marketing` role
+holds `analytics.read` and none of those three, so the four specified
+tools, had they declared the key their names suggest, would have been
+listed for a marketing account and refused by Postgres on every call —
+the defect MCP-017 was written about. Each tool declares the key its
+TABLE requires; only the events summary takes `analytics.read`.
+
+That fifth tool was added rather than specified. Without it
+`analytics.read` would grant nothing at all through MCP, and the site's
+actual visitor analytics — the event counts and the conversion funnel
+already on /admin/analytics — would be the one thing an analytics module
+could not report.
+
+**The aggregation layer did not exist.** `src/lib/analytics/` is entirely
+event TRACKING — consent, event names, the client and server emitters —
+and `src/lib/admin/get-analytics.ts` reports on `analytics_events` alone
+through three RPCs. Nothing anywhere aggregated commercial figures:
+`getDashboardStats()` computes a fixed set of counts for one screen, with
+no date range and no breakdown. `src/lib/analytics/reporting.ts` is new.
+
+**Aggregates only, enforced in the service rather than the tool.** The
+plan's rule is that no tool returns a customer list as an analytics
+result. `customerSummary` uses head-only counts, so no profile row is
+fetched at all — there is nothing in memory to leak and no future edit
+can widen a `select("id")` into a `select("*")`. The suite checks every
+response against a real seeded customer's email and id rather than
+against a regex for what an email looks like.
+
+Three judgements worth recording. Revenue counts SUCCEEDED payments only,
+because a pending payment is money somebody intends to send and counting
+it would overstate every figure — `getDashboardStats()` already made that
+choice and the two must not disagree about what revenue means. A status
+breakdown lists every status INCLUDING the zeroes, because "no cancelled
+orders" and "the key was absent" are not the same claim. And a period
+compared against an empty previous period reports `null`, not a
+percentage: "+100%" for the first sale ever is a number an assistant
+would repeat as though it meant something.
+
+`orders_pending_summary` takes no date range, because "what still needs
+doing" is a question about the present; it reports the oldest open
+order's date, since a count hides the order that has been stuck since
+April.
+
+Verified by `scripts/test-mcp-analytics.mjs` — 95 checks.
 
 # MODULE 42 — ADMIN AI CHAT INTERFACE
 
@@ -3968,20 +4023,22 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULES 0-31 COMPLETE` + `MODULES 36-39 COMPLETE`
+`MODULES 0-31 COMPLETE` + `MODULES 36-40 COMPLETE`
 
 Current Module:
 
-`MODULE 40 — MCP CONTENT & SEO TOOLS — COMPLETE`
+`MODULE 41 — MCP ANALYTICS & REPORTING TOOLS — COMPLETE`
 
 Outstanding, in two independent tracks:
 
 - Deployment track: `MODULE 32 — PRODUCTION DEPLOYMENT` (not started),
   then `MODULE 33 — PRODUCTION READINESS & HANDOVER`.
-- MCP track (Phase 6, see section 12B/12C): `MODULE 41 — MCP ANALYTICS &
-  REPORTING TOOLS` (not started), then 42-43. `MODULE 44 — MCP CUSTOMER
+- MCP track (Phase 6, see section 12B/12C): `MODULE 42 — ADMIN AI CHAT
+  INTERFACE` (not started), then 43. `MODULE 44 — MCP CUSTOMER
   SELF-SERVICE READ TOOLS` (not started) is unblocked, since Module 37 is
-  complete and its read-tool patterns exist to reuse.
+  complete and its read-tool patterns exist to reuse. Module 42 is the
+  first module in this track with a user interface, and the first that
+  consumes the registry rather than adding to it.
 
 Module 40 inherits four patterns and should not reinvent them: the write
 service lives in `src/lib/<domain>/`, not in the action; a partial update
@@ -3991,15 +4048,20 @@ on an editor; and where the domain has rules, they live in a service both
 the admin UI and the tools read, with the UI free to pass
 `allowCorrection` and the tools never allowed to.
 
-A WARNING FOR 41 AND 44, now learned twice. This plan's description of
-what already exists has been wrong in both of the last two modules. 39
-was told to reuse workflow validation that did not exist — three layers
-of enum checking that looked like validation from a distance. 40 was
-specified with a tool for an announcement mechanism deleted in Module 19,
-and with an approval workflow that was a sentence in this plan and
-nothing in the schema. Check what is there before building on it, and
-check the RLS POLICY rather than the route gate when choosing a tool's
-permission — Module 40 found those two disagreeing.
+A WARNING FOR 42, 43 AND 44, now learned three times running. This plan's
+description of what already exists has been wrong in each of the last
+three modules. 39 was told to reuse workflow validation that did not
+exist — three layers of enum checking that looked like validation from a
+distance. 40 was specified with a tool for an announcement mechanism
+deleted in Module 19, and with an approval workflow that was a sentence
+in this plan and nothing in the schema. 41 was specified as four
+`analytics` tools, and `analytics.read` turned out to gate one table that
+none of the four reads.
+
+Two rules follow, and they are cheap: check what is there before building
+on it, and choose a tool's permission from the RLS POLICY on the table it
+reads, never from the route gate on the page it resembles. Modules 40 and
+41 both found those two disagreeing.
 
 Scope extension recorded, not built: MCP now serves customers as well as
 staff. The architecture is documented in 12B.1, 12B.2, 12B.4, 12B.9,
@@ -4018,9 +4080,10 @@ One consequence of the scope extension is recorded rather than decided:
 customer tools carry no permission key, because all 23 existing keys mean
 "any record" rather than "my record" (12B.4).
 
-Modules 37 to 40 are complete. `MODULE 41 — MCP ANALYTICS & REPORTING
-TOOLS` and `MODULE 44 — MCP CUSTOMER SELF-SERVICE READ TOOLS` are both
-buildable; 44 is not blocked by 41.
+Modules 37 to 41 are complete, which is every tool-building module the
+roadmap specified. `MODULE 42 — ADMIN AI CHAT INTERFACE` and `MODULE 44 —
+MCP CUSTOMER SELF-SERVICE READ TOOLS` are both buildable; 44 is not
+blocked by 42.
 
 Modules 34, 35 remain FUTURE PHASE and are out of the current commercial
 plan.
@@ -4051,5 +4114,5 @@ stylesheet.
 
 Next Action:
 
-`Start Module 41` or `Start Module 44` (MCP track), or `Start Module 32`
+`Start Module 42` or `Start Module 44` (MCP track), or `Start Module 32`
 (deployment track)

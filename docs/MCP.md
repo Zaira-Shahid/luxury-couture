@@ -85,8 +85,8 @@ rather than partially processed. `GET` returns `405`.
 
 ## The tools
 
-Forty-five, added per module (Master Build Plan 12C). Everything the AI
-can do in this application is this list and nothing else.
+Fifty, added per module (Master Build Plan 12C). Everything the AI can do
+in this application is this list and nothing else.
 
 **System (Module 36)**
 
@@ -186,7 +186,36 @@ every post it writes is a draft flagged `ai_generated` (migration 0064).
 No MCP tool anywhere can publish content — that stays a person's action
 in /admin/content, which is also the review step.
 
-**Two shapes recur and are deliberate.**
+****Read (Module 41)** — five reporting tools, and the permission column
+is again the one to read carefully:
+
+| Tool | Permission | What it does |
+| --- | --- | --- |
+| `analytics_sales_summary` | `payments.read` | revenue, payment count, average, vs previous period |
+| `analytics_order_summary` | `orders.read` | orders placed in a window, value, count per status |
+| `orders_pending_summary` | `orders.read` | what is open right now, and the oldest one |
+| `analytics_customer_summary` | `customers.read` | customer counts, new in period. COUNTS ONLY |
+| `analytics_events_summary` | `analytics.read` | event totals and the conversion funnel |
+
+**Only one analytics tool takes `analytics.read`.** Migration 0054 gates
+that key on `analytics_events` alone — orders, payments and profiles each
+need their own. The `marketing` role holds `analytics.read` and none of
+the other three, so the four commercial summaries declare the key their
+TABLE requires rather than the one their name suggests. This is MCP-017
+applied a second time.
+
+**Aggregates only.** No reporting tool returns a customer, a name, an
+email or a list. `analytics_customer_summary` uses head-only counts, so
+no profile row is fetched at all — there is nothing to leak rather than
+something filtered out. Use `customers_search` to find a person.
+
+**What the numbers mean.** Revenue is SUCCEEDED payments only, so pending
+money is not counted. Status breakdowns include the statuses with zero,
+because an absent key and a genuine zero are different claims. A period
+with no previous activity reports `changePercent: null` rather than a
+percentage against zero.
+
+Two shapes recur and are deliberate.**
 
 **A status change is never a field on an editor.** Publishing and
 archiving are high-risk under 12B.6 and a description edit is not, and

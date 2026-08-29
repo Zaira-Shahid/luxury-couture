@@ -63,6 +63,22 @@ and fail every later SEO script in the suite. So the original value is captured 
 runs and restored in the cleanup unconditionally. Writing that test also caught a real defect:
 the service read an absent setting as "indexed" when this project's default is the opposite.
 
+`test-mcp-analytics.mjs` (Module 41) is the fifth, and the shortest, because four of its five
+tools are refusals for most accounts. Its centre is the permission split: the `marketing` role
+holds `analytics.read` and none of `orders.read`, `payments.read` or `customers.read`, so the
+script points that one account at all five tools and asserts it reaches exactly one. `finance` is
+pointed at the same five to catch the opposite error — it holds orders and payments but not
+customers.
+
+The numbers are checked against arithmetic the script did itself, on rows it created: three
+orders of known value, two succeeded payments and one pending payment that must not appear in
+revenue. A reporting tool that returns a confident wrong total is worse than one that fails,
+because an assistant will repeat it.
+
+"Aggregates only" is checked against a real seeded customer — their email and id, and the ids of
+the orders they placed — rather than against a regex for what an email looks like. The rule is
+that this specific person cannot be found in an analytics answer.
+
 **Most of it is negative, and that is the design.** The checks that matter are: an anonymous
 caller refused, a customer refused, a production account refused a tool it was never shown
 (hiding a tool is not the enforcement), twelve shapes of `execute_sql`/`shell`/`read_file`
