@@ -3,9 +3,10 @@
 import { revalidatePath } from "next/cache";
 
 import { getAuthUser } from "@/lib/auth/session";
-import { logger } from "@/lib/logger";
-import { notify } from "@/lib/notifications/notify";
-import { productionStatusChangedTemplate, qcCompleteTemplate } from "@/lib/notifications/templates";
+import {
+  advanceProductionStatusRecord,
+  updateProductionDetailsRecord,
+} from "@/lib/production/write-production";
 import { createClient } from "@/lib/supabase/server";
 import { advanceProductionStatusSchema, updateProductionDetailsSchema } from "@/lib/validations/production";
 
@@ -27,48 +28,23 @@ export async function advanceProductionStatus(productionOrderId: string, formDat
   const user = await getAuthUser();
   if (!user) return { error: "You must be signed in." };
 
-  const { data: production } = await supabase
-    .from("production_orders")
-    .select("order_id")
-    .eq("id", productionOrderId)
-    .single();
-  if (!production) return { error: "Production order not found." };
-
-  const { error: updateErr } = await supabase
-    .from("production_orders")
-    .update({ current_status: parsed.data.status })
-    .eq("id", productionOrderId);
-  if (updateErr) {
-    logger.error("production status update failed", updateErr, { productionOrderId });
-    return { error: "Could not update production status. Please try again." };
-  }
-
-  await supabase.from("production_status_history").insert({
-    production_order_id: productionOrderId,
-    status: parsed.data.status,
-    note: parsed.data.note ?? null,
-    changed_by: user.id,
-  });
-
-  const { data: order } = await supabase
-    .from("orders")
-    .select("customer_id, order_number")
-    .eq("id", production.order_id)
-    .single();
-  if (order) {
-    const template =
-      parsed.data.status === "quality_check"
-        ? qcCompleteTemplate(order.order_number)
-        : productionStatusChangedTemplate(order.order_number, parsed.data.status);
-    await notify(supabase, {
-      profileId: order.customer_id,
-      entityId: production.order_id,
-      ...template,
-    });
-  }
+  // allowCorrection — see the same call in admin-orders/actions.ts. A
+  // supervisor correcting a mis-tap on the workshop floor keeps the
+  // freedom this form has always given them.
+  const result = await advanceProductionStatusRecord(
+    {
+      productionOrderId,
+      status: parsed.data.status,
+      note: parsed.data.note ?? null,
+      actorId: user.id,
+      allowCorrection: true,
+    },
+    supabase
+  );
+  if (!result.ok) return { error: result.error };
 
   revalidatePath(`/admin/production/${productionOrderId}`);
-  revalidatePath(`/account/orders/${production.order_id}`);
+  revalidatePath(`/account/orders/${result.data.orderId}`);
   return { success: true };
 }
 
@@ -80,26 +56,22 @@ export async function updateProductionDetails(productionOrderId: string, formDat
   if (!parsed.success) return { error: "Invalid input." };
 
   const supabase = await createClient();
-  const { data: production } = await supabase
-    .from("production_orders")
-    .select("order_id")
-    .eq("id", productionOrderId)
-    .single();
-  if (!production) return { error: "Production order not found." };
 
-  const { error } = await supabase
-    .from("production_orders")
-    .update({
-      assigned_team: parsed.data.assignedTeam || null,
-      estimated_completion_date: parsed.data.estimatedCompletionDate || null,
-    })
-    .eq("id", productionOrderId);
-  if (error) {
-    logger.error("production details update failed", error, { productionOrderId });
-    return { error: "Could not update these details. Please try again." };
-  }
+  // The form always posts both fields, so `?? null` here preserves its
+  // "blank means clear" behaviour exactly. A tool omitting a field means
+  // something different, which is why the service distinguishes
+  // undefined from null rather than this call site doing it.
+  const result = await updateProductionDetailsRecord(
+    {
+      productionOrderId,
+      assignedTeam: parsed.data.assignedTeam ?? null,
+      estimatedCompletionDate: parsed.data.estimatedCompletionDate ?? null,
+    },
+    supabase
+  );
+  if (!result.ok) return { error: result.error };
 
   revalidatePath(`/admin/production/${productionOrderId}`);
-  revalidatePath(`/account/orders/${production.order_id}`);
+  revalidatePath(`/account/orders/${result.data.orderId}`);
   return { success: true };
 }

@@ -2591,10 +2591,11 @@ weight, as in Module 26.
 
 ## 12B.14 Known limitations (as of Module 38)
 
-- Twenty-eight tools exist: the three system tools (Module 36), the
-  fourteen read tools (Module 37) and the eleven catalogue write tools
-  (Module 38). Orders, production, content, SEO and analytics have no
-  write tool yet; those arrive with Modules 39-41.
+- Thirty-five tools exist: the three system tools (Module 36), the
+  fourteen read tools (Module 37), the eleven catalogue write tools
+  (Module 38) and the seven order, production and enquiry write tools
+  (Module 39). Content, SEO and analytics have no write tool yet; those
+  arrive with Modules 40-41.
 - No customer-facing tools exist. The customer audience is SPECIFIED in
   12B.16 and scheduled as Module 44; nothing in it is built, and every
   registered tool today is admin-audience.
@@ -2619,6 +2620,15 @@ weight, as in Module 26.
   values of every field. `products_publish` and `builder_options_*` return
   the previous status because their services read it anyway, but a general
   before/after diff is not implemented.
+- Status transition rules are enforced for MCP and NOT for the admin UI,
+  which passes `allowCorrection: true` and can still set any status from
+  any status (Module 39). That is deliberate — see Module 39 — but it
+  means "the application permits only forward moves" is true of the tools
+  and not of the product. A UI that offered only the legal next steps
+  would be the honest end state, and is not built.
+- Writes are still not diffed (Module 38), and the order and production
+  services now return the previous status because they read it anyway.
+  A general before/after diff is still not implemented.
 - The endpoint is session-bound, so an external MCP client must supply a
   real user access token. No stdio transport (see 12B.3).
 - Rate limiting is per-actor and table-backed; it throttles a runaway loop,
@@ -2885,13 +2895,68 @@ must win.
 
 # MODULE 39 — MCP ORDER & PRODUCTION TOOLS
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
 
-`orders_update_status`, `production_update_status`,
-`production_update_qc_status`, `enquiries_update_status`. Status transitions
-must go through the existing workflow validation — no tool may invent a
-transition the application does not already permit. Payment status and
-refunds stay out of MCP until explicitly authorised.
+Seven tools: `orders_update_status`, `orders_cancel` (both high),
+`orders_add_note`, `production_advance_status`, `production_record_qc`,
+`production_update_details` and `enquiries_update_status` (all medium).
+
+**The workflow validation this module was told to go through did not
+exist.** The instruction above was to route status changes through the
+application's existing rules rather than write the column directly.
+There were no rules. `orders.status` was checked three times and every
+check asked the same question — is this one of the seven allowed
+strings: `updateOrderStatusSchema`, the table's CHECK constraint, and the
+admin dropdown, which listed all seven unconditionally. Nothing anywhere
+asked whether the move made sense from the CURRENT status, so a
+delivered order could be walked back to pending, and
+`advanceProductionStatus` — named "advance" — would write any of the
+twelve stages, including one six steps behind.
+
+So the rules were written, in `src/lib/orders/transitions.ts` and
+`src/lib/production/transitions.ts`, as a domain service both doorways
+read. Forward moves are allowed and may skip stages, because the
+business genuinely skips them — a ready-to-wear piece never enters
+production, a piece with no embroidery goes from materials to
+stitching. Backward moves are not a workflow step; they are a
+correction.
+
+**The admin UI keeps the freedom it had.** The rules take an
+`allowCorrection` flag. The three admin forms pass `true` and behave
+exactly as before; every tool passes `false`. The asymmetry is the
+point rather than an oversight: a correction is a human judgement about
+a mistake, and an assistant cannot tell a mistake from an instruction.
+Removing the capability from the people who have it, in the name of a
+rule written for assistants, would have been this module doing damage on
+its way past.
+
+**`production_update_qc_status` became `production_record_qc`, because
+there is no QC status to update.** No `qc_status` column exists;
+`quality_check` is one of the twelve pipeline stages. But QC is not
+missing — migration 0054 gives `qc.write` its own INSERT policy on
+`production_status_history`, separate from `production.write`, with the
+comment "a QC user must be able to record a result WITHOUT being able to
+move the job through production themselves". The database drew the line
+before any tool existed. So the tool records an outcome as a history row
+at the job's CURRENT stage and moves nothing, and the two permissions
+are tested in both directions.
+
+**Order status changes are high risk, which is stronger than the
+catalogue.** 12B.6 makes publishing high-risk; an order status change is
+worse in one specific way — it emails the customer. A wrongly published
+product can be unpublished; a customer told their order shipped cannot
+be untold. Production stages are medium: they are an internal record of
+where work has reached, not a claim about the outside world.
+
+Also fixed on the way through: `advanceProductionStatus` wrote history
+but never wrote an `audit_logs` row, so the audit trail covered the
+order pipeline and not the twelve stages the garment actually passes
+through. It audits now.
+
+Payment status and refunds stay out of MCP, as instructed. Nothing in
+this module touches money.
+
+Verified by `scripts/test-mcp-orders.mjs` — 178 checks.
 
 # MODULE 40 — MCP CONTENT & SEO TOOLS
 
@@ -3826,28 +3891,34 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULES 0-31 COMPLETE` + `MODULES 36-37 COMPLETE`
+`MODULES 0-31 COMPLETE` + `MODULES 36-38 COMPLETE`
 
 Current Module:
 
-`MODULE 38 — MCP WRITE TOOLS & CONFIRMATION WORKFLOW — COMPLETE`
+`MODULE 39 — MCP ORDER & PRODUCTION TOOLS — COMPLETE`
 
 Outstanding, in two independent tracks:
 
 - Deployment track: `MODULE 32 — PRODUCTION DEPLOYMENT` (not started),
   then `MODULE 33 — PRODUCTION READINESS & HANDOVER`.
-- MCP track (Phase 6, see section 12B/12C): `MODULE 39 — MCP ORDER &
-  PRODUCTION TOOLS` (not started), then 40-43. `MODULE 44 — MCP CUSTOMER
+- MCP track (Phase 6, see section 12B/12C): `MODULE 40 — MCP CONTENT &
+  SEO TOOLS` (not started), then 41-43. `MODULE 44 — MCP CUSTOMER
   SELF-SERVICE READ TOOLS` (not started) is unblocked, since Module 37 is
   complete and its read-tool patterns exist to reuse.
 
-Module 39 inherits three patterns from 38 and should not reinvent them:
-the write service lives in `src/lib/<domain>/`, not in the action; a
-partial update merges onto the stored record before the domain schema
-runs; and any status transition that 12B.6 calls high-risk is its own
-tool, not an argument on an editor. Unlike the catalogue, order and
-production statuses have workflow validation already — 39 must go
-through it rather than write a status column directly.
+Module 40 inherits four patterns and should not reinvent them: the write
+service lives in `src/lib/<domain>/`, not in the action; a partial update
+merges onto the stored record before the domain schema runs; any
+transition 12B.6 calls high-risk is its own tool rather than an argument
+on an editor; and where the domain has rules, they live in a service both
+the admin UI and the tools read, with the UI free to pass
+`allowCorrection` and the tools never allowed to.
+
+A WARNING FOR 40 AND 44, learned in 39: this plan's description of what
+already exists has been wrong once. Module 39 was told to route status
+changes "through the existing workflow validation", and there was none —
+three layers of enum checking that looked like validation from a
+distance. Check what is there before building on it.
 
 Scope extension recorded, not built: MCP now serves customers as well as
 staff. The architecture is documented in 12B.1, 12B.2, 12B.4, 12B.9,
@@ -3866,9 +3937,9 @@ One consequence of the scope extension is recorded rather than decided:
 customer tools carry no permission key, because all 23 existing keys mean
 "any record" rather than "my record" (12B.4).
 
-Modules 37 and 38 are complete. `MODULE 39 — MCP ORDER & PRODUCTION
+Modules 37, 38 and 39 are complete. `MODULE 40 — MCP CONTENT & SEO
 TOOLS` and `MODULE 44 — MCP CUSTOMER SELF-SERVICE READ TOOLS` are both
-buildable; 44 is not blocked by 39.
+buildable; 44 is not blocked by 40.
 
 Modules 34, 35 remain FUTURE PHASE and are out of the current commercial
 plan.
@@ -3899,5 +3970,5 @@ stylesheet.
 
 Next Action:
 
-`Start Module 39` or `Start Module 44` (MCP track), or `Start Module 32`
+`Start Module 40` or `Start Module 44` (MCP track), or `Start Module 32`
 (deployment track)

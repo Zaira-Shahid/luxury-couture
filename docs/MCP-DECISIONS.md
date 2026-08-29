@@ -289,3 +289,86 @@ before the domain schema runs, so the schema still validates the complete
 record and 12B.11's "no second business-logic system" holds.
 
 *2026-08-29 · Module 38*
+
+---
+
+## MCP-014 — The workflow validation Module 39 was told to reuse did not exist
+
+**Decision.** Module 39 wrote the order and production transition rules
+rather than routing through existing ones, because there were none.
+
+**Reason.** The Master Build Plan instructed Module 39 to "go through the
+existing workflow validation — no tool may invent a transition the
+application does not already permit". Three things validated
+`orders.status` and all three asked the same question, is this one of the
+seven allowed strings: `updateOrderStatusSchema`, the table's CHECK
+constraint, and the admin dropdown, which listed every status
+unconditionally. Nothing asked whether the move made sense from the
+current status. A delivered order could be walked back to pending, and
+`advanceProductionStatus` — named "advance" — would write any of the
+twelve stages, including one six steps behind, notifying the customer
+that their order had regressed.
+
+Building MCP-only rules would have been worse than none: two descriptions
+of the same business, guaranteed to drift. So the rules are a domain
+service in `src/lib/orders/transitions.ts` and
+`src/lib/production/transitions.ts`, and both doorways read them.
+
+**Impact.** Forward moves may skip stages, because the business skips
+them. Backward moves and reopened terminal states are refused for tools.
+The pre-existing gap in the admin UI is now visible rather than
+theoretical, and is recorded as a limitation in 12B.14.
+
+*2026-08-29 · Module 39*
+
+---
+
+## MCP-015 — The admin UI keeps the freedom the tools are denied
+
+**Decision.** The transition rules take an `allowCorrection` flag. The
+three admin forms pass `true` and behave exactly as they always have;
+every MCP tool passes `false`.
+
+**Reason.** A backward status move is not a workflow step, it is a
+correction of a mistake — and an admin looking at the order they just
+mis-clicked is precisely who should be able to make one. Holding the
+forms to the new rules would have meant this module removing a capability
+the business has, in the name of a rule written for assistants. An
+assistant is the caller that cannot tell a mistake from an instruction,
+so it is the caller that gets the rules.
+
+**Impact.** No change to any admin screen. The asymmetry is asserted in
+`test-mcp-orders.mjs` in both directions — the forms must keep passing
+`allowCorrection: true`, the tools must never pass it — so neither half
+can drift without a failing test.
+
+*2026-08-29 · Module 39*
+
+---
+
+## MCP-016 — `production_update_qc_status` became `production_record_qc`
+
+**Decision.** The QC tool records an inspection outcome as a history row
+at the job's current stage and moves nothing. It takes `qc.write`, not
+`production.write`.
+
+**Reason.** The planned tool assumed a `qc_status` column. There is none;
+`quality_check` is one of the twelve pipeline stages. But QC was not
+missing from the design — migration 0054 gave `qc.write` its own INSERT
+policy on `production_status_history`, separate from `production.write`,
+with the comment "a QC user must be able to record a result WITHOUT being
+able to move the job through production themselves". The database drew
+this line before any tool existed, and a tool that folded QC into the
+status change would have handed every QC user the workshop.
+
+Adding a `qc_status` column would have duplicated a fact the history
+table already holds, and put the current inspection result in one place
+and its history in another.
+
+**Impact.** A pass does not advance the job and a failure does not send
+it back; what happens next is a person's decision, made with
+`production_advance_status`. No customer notification — a failed
+inspection is internal until somebody decides what it means. The two
+permissions are tested in both directions.
+
+*2026-08-29 · Module 39*
