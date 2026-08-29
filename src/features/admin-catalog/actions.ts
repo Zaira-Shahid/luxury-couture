@@ -3,6 +3,12 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
+import {
+  createCollectionRecord,
+  createProductRecord,
+  updateCollectionRecord,
+  updateProductRecord,
+} from "@/lib/catalog/write-catalog";
 import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
 import { categorySchema, collectionSchema, productSchema } from "@/lib/validations/catalog";
@@ -21,22 +27,6 @@ function parseImagesField(formData: FormData) {
   } catch {
     return [];
   }
-}
-
-async function upsertSeoMetadata(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  entityType: "product" | "collection",
-  entityId: string,
-  metaTitle: string | null,
-  metaDescription: string | null
-) {
-  if (!metaTitle && !metaDescription) return;
-  await supabase
-    .from("seo_metadata")
-    .upsert(
-      { entity_type: entityType, entity_id: entityId, meta_title: metaTitle, meta_description: metaDescription },
-      { onConflict: "entity_type,entity_id" }
-    );
 }
 
 // ---- Products --------------------------------------------------------
@@ -58,46 +48,14 @@ export async function createProduct(formData: FormData): Promise<ActionResult> {
   });
   if (!parsed.success) return { error: firstIssueMessage(parsed.error) };
 
-  const supabase = await createClient();
-  const { data: product, error } = await supabase
-    .from("products")
-    .insert({
-      name: parsed.data.name,
-      slug: parsed.data.slug,
-      sku: parsed.data.sku,
-      description: parsed.data.description,
-      base_price: parsed.data.basePrice,
-      currency: parsed.data.currency,
-      category_id: parsed.data.categoryId,
-      status: parsed.data.status,
-      is_featured: parsed.data.isFeatured,
-      published_at: parsed.data.status === "published" ? new Date().toISOString() : null,
-    })
-    .select()
-    .single();
-
-  if (error || !product) {
-    logger.error("product create failed", error);
-    return { error: error?.message.includes("duplicate") ? "That slug is already in use." : "Could not create the product." };
-  }
-
-  if (parsed.data.images.length) {
-    await supabase.from("product_images").insert(
-      parsed.data.images.map((img, i) => ({
-        product_id: product.id,
-        url: img.url,
-        alt_text: img.altText || null,
-        sort_order: i,
-        is_primary: img.isPrimary,
-      }))
-    );
-  }
-
-  await upsertSeoMetadata(supabase, "product", product.id, parsed.data.metaTitle, parsed.data.metaDescription);
+  const result = await createProductRecord(parsed.data, await createClient());
+  if (!result.ok) return { error: result.error };
 
   revalidatePath("/admin/products");
   revalidatePath("/products");
-  redirect(`/admin/products/${product.id}/edit`);
+  // redirect() THROWS, which is why it lives here and not in the service:
+  // a browser has a Next render to catch it, and the MCP route does not.
+  redirect(`/admin/products/${result.data.id}/edit`);
 }
 
 export async function updateProduct(productId: string, formData: FormData): Promise<ActionResult> {
@@ -117,55 +75,8 @@ export async function updateProduct(productId: string, formData: FormData): Prom
   });
   if (!parsed.success) return { error: firstIssueMessage(parsed.error) };
 
-  const supabase = await createClient();
-  const { data: existing } = await supabase
-    .from("products")
-    .select("status, published_at")
-    .eq("id", productId)
-    .single();
-
-  const publishedAt =
-    parsed.data.status === "published"
-      ? (existing?.published_at ?? new Date().toISOString())
-      : null;
-
-  const { error } = await supabase
-    .from("products")
-    .update({
-      name: parsed.data.name,
-      slug: parsed.data.slug,
-      sku: parsed.data.sku,
-      description: parsed.data.description,
-      base_price: parsed.data.basePrice,
-      currency: parsed.data.currency,
-      category_id: parsed.data.categoryId,
-      status: parsed.data.status,
-      is_featured: parsed.data.isFeatured,
-      published_at: publishedAt,
-    })
-    .eq("id", productId);
-
-  if (error) {
-    logger.error("product update failed", error, { productId });
-    return { error: "Could not update the product." };
-  }
-
-  // Replace the image list wholesale — simplest correct approach for a
-  // small, admin-managed, URL-paste list (no upload, no ordering drag-drop).
-  await supabase.from("product_images").delete().eq("product_id", productId);
-  if (parsed.data.images.length) {
-    await supabase.from("product_images").insert(
-      parsed.data.images.map((img, i) => ({
-        product_id: productId,
-        url: img.url,
-        alt_text: img.altText || null,
-        sort_order: i,
-        is_primary: img.isPrimary,
-      }))
-    );
-  }
-
-  await upsertSeoMetadata(supabase, "product", productId, parsed.data.metaTitle, parsed.data.metaDescription);
+  const result = await updateProductRecord(productId, parsed.data, await createClient());
+  if (!result.ok) return { error: result.error };
 
   revalidatePath("/admin/products");
   revalidatePath(`/admin/products/${productId}/edit`);
@@ -188,19 +99,6 @@ export async function deleteProduct(productId: string): Promise<ActionResult> {
 
 // ---- Collections -------------------------------------------------------
 
-async function syncCollectionProducts(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  collectionId: string,
-  productIds: string[]
-) {
-  await supabase.from("product_collections").delete().eq("collection_id", collectionId);
-  if (productIds.length) {
-    await supabase
-      .from("product_collections")
-      .insert(productIds.map((productId) => ({ collection_id: collectionId, product_id: productId })));
-  }
-}
-
 export async function createCollection(formData: FormData): Promise<ActionResult> {
   const parsed = collectionSchema.safeParse({
     name: formData.get("name"),
@@ -215,32 +113,12 @@ export async function createCollection(formData: FormData): Promise<ActionResult
   });
   if (!parsed.success) return { error: firstIssueMessage(parsed.error) };
 
-  const supabase = await createClient();
-  const { data: collection, error } = await supabase
-    .from("collections")
-    .insert({
-      name: parsed.data.name,
-      slug: parsed.data.slug,
-      description: parsed.data.description,
-      cover_image_url: parsed.data.coverImageUrl,
-      is_featured: parsed.data.isFeatured,
-      is_active: parsed.data.isActive,
-      published_at: parsed.data.isActive ? new Date().toISOString() : null,
-    })
-    .select()
-    .single();
-
-  if (error || !collection) {
-    logger.error("collection create failed", error);
-    return { error: error?.message.includes("duplicate") ? "That slug is already in use." : "Could not create the collection." };
-  }
-
-  await syncCollectionProducts(supabase, collection.id, parsed.data.productIds);
-  await upsertSeoMetadata(supabase, "collection", collection.id, parsed.data.metaTitle, parsed.data.metaDescription);
+  const result = await createCollectionRecord(parsed.data, await createClient());
+  if (!result.ok) return { error: result.error };
 
   revalidatePath("/admin/collections");
   revalidatePath("/collections");
-  redirect(`/admin/collections/${collection.id}/edit`);
+  redirect(`/admin/collections/${result.data.id}/edit`);
 }
 
 export async function updateCollection(collectionId: string, formData: FormData): Promise<ActionResult> {
@@ -257,26 +135,8 @@ export async function updateCollection(collectionId: string, formData: FormData)
   });
   if (!parsed.success) return { error: firstIssueMessage(parsed.error) };
 
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("collections")
-    .update({
-      name: parsed.data.name,
-      slug: parsed.data.slug,
-      description: parsed.data.description,
-      cover_image_url: parsed.data.coverImageUrl,
-      is_featured: parsed.data.isFeatured,
-      is_active: parsed.data.isActive,
-    })
-    .eq("id", collectionId);
-
-  if (error) {
-    logger.error("collection update failed", error, { collectionId });
-    return { error: "Could not update the collection." };
-  }
-
-  await syncCollectionProducts(supabase, collectionId, parsed.data.productIds);
-  await upsertSeoMetadata(supabase, "collection", collectionId, parsed.data.metaTitle, parsed.data.metaDescription);
+  const result = await updateCollectionRecord(collectionId, parsed.data, await createClient());
+  if (!result.ok) return { error: result.error };
 
   revalidatePath("/admin/collections");
   revalidatePath(`/admin/collections/${collectionId}/edit`);

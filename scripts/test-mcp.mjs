@@ -569,14 +569,24 @@ check("no response leaks a stack trace", !everythingSeen.includes("at async") &&
 // ---- Audit behaviour -------------------------------------------------
 console.log("\n## Audit");
 
-// Module 36 registers no write tools, so the assertion available here is
-// the read half of the rule: reads must NOT write audit rows. The write
-// half is exercised in Module 38, where the first mutating tool lands.
-const { count: mcpAuditRows } = await admin
+// The rule this script owns is the READ half (12B.7): a read must leave
+// no audit row. Until Module 38 that could be asserted as "no mcp.* row
+// exists at all", because no write tool existed to make one. Write tools
+// exist now and are audited deliberately, so the global count is the
+// wrong question — it would fail on correct behaviour. The assertion is
+// narrowed to what it always protected: no row names a READ tool. The
+// write half is asserted in test-mcp-write.mjs.
+const readToolNames = (adminList.json?.result?.tools ?? [])
+  .filter((t) => t._meta?.kind === "read")
+  .map((t) => `mcp.${t.name}`);
+
+const { count: readAuditRows } = await admin
   .from("audit_logs")
   .select("id", { count: "exact", head: true })
-  .like("action", "mcp.%");
-check("read tools write no audit rows", (mcpAuditRows ?? 0) === 0);
+  .in("action", readToolNames);
+
+check("the registry actually exposes read tools to check", readToolNames.length > 0);
+check("read tools write no audit rows", (readAuditRows ?? 0) === 0);
 
 // ---------------------------------------------------------------------
 for (const id of createdUsers) await admin.auth.admin.deleteUser(id);

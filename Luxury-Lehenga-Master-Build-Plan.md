@@ -2492,11 +2492,20 @@ src/lib/mcp/
     index.ts      assembles the registry from the domain modules
     system.ts     system_ping, system_whoami, system_diagnostics
     <domain>.ts   one file per domain, added by its own module
+    catalog-write.ts  Module 38's writers, split from catalog.ts (below)
     customer/     customer-audience tools (Module 44), one file per domain
 src/app/api/mcp/route.ts
 ```
 
 One file per domain. No single file containing every tool.
+
+**Read and write may split within a domain (Module 38).** The catalogue
+writers live in `catalog-write.ts` rather than being appended to
+`catalog.ts`. The rule's purpose is that reviewing a module means
+reviewing one file; eleven writers appended to a 300-line reader file
+would have kept the letter of it and lost the point, and read-vs-write is
+the axis a security review actually cuts along. The rule is unchanged for
+everything else: no file holds two domains.
 
 Customer tools live under `tools/customer/` rather than mixed into the
 admin domain files. The split is not cosmetic: it makes "which tools can a
@@ -2580,11 +2589,12 @@ invalid input, unauthenticated access, wrong-role access, business-rule
 violations and failure handling — with the negative half carrying the
 weight, as in Module 26.
 
-## 12B.14 Known limitations (as of Module 37)
+## 12B.14 Known limitations (as of Module 38)
 
-- Seventeen tools exist: the three system tools (Module 36) and the
-  fourteen read tools (Module 37). No write tool exists yet; the first
-  arrive with Module 38.
+- Twenty-eight tools exist: the three system tools (Module 36), the
+  fourteen read tools (Module 37) and the eleven catalogue write tools
+  (Module 38). Orders, production, content, SEO and analytics have no
+  write tool yet; those arrive with Modules 39-41.
 - No customer-facing tools exist. The customer audience is SPECIFIED in
   12B.16 and scheduled as Module 44; nothing in it is built, and every
   registered tool today is admin-audience.
@@ -2596,10 +2606,19 @@ weight, as in Module 26.
 - `customers_search` matches on name only. There is no email search,
   because `customers_search` deliberately returns no contact details.
 - No streaming, no MCP resources, no prompts, no sampling — `tools/*` only.
-- Confirmation tokens are stateless, so a token is single-action but not
-  single-USE: within its 5-minute TTL the same token could execute the same
-  action twice. A replay ledger arrives with Module 38, where the first
-  destructive tools do.
+- CLOSED IN MODULE 38. Confirmation tokens are still stateless HMACs, but
+  the dispatcher now SPENDS one before acting, against the ledger in
+  `0063_mcp_confirmations.sql`. The signature is the primary key, so two
+  concurrent calls carrying the same token cannot both write — Postgres
+  decides the race, not application timing — and a ledger that cannot be
+  reached fails the action closed rather than guessing. The table has RLS
+  on with no write policy at all: a ledger an administrator could delete
+  from is a ledger an administrator could defeat.
+- Writes are audited but not *diffed*. The audit row records the request,
+  the outcome and the record touched; it does not store the previous
+  values of every field. `products_publish` and `builder_options_*` return
+  the previous status because their services read it anyway, but a general
+  before/after diff is not implemented.
 - The endpoint is session-bound, so an external MCP client must supply a
   real user access token. No stdio transport (see 12B.3).
 - Rate limiting is per-actor and table-backed; it throttles a runaway loop,
@@ -2800,12 +2819,69 @@ NOT_FOUND rather than an empty success.
 
 # MODULE 38 — MCP WRITE TOOLS & CONFIRMATION WORKFLOW
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
 
-The first mutating tools, through the existing Server Actions:
-`products_create`, `products_update`, `products_archive`,
-`collections_create`, `collections_update`, and the builder option writers.
-Adds the confirmation replay ledger noted in 12B.14.
+The first mutating tools, and the confirmation replay ledger noted in
+12B.14. Eleven tools, all `catalog.write`:
+
+- `products_create`, `products_update` (medium)
+- `products_publish`, `products_archive` (high)
+- `collections_create`, `collections_update` (medium)
+- `collections_set_visibility` (high)
+- `builder_options_create`, `builder_options_update`,
+  `builder_options_activate` (medium)
+- `builder_options_deactivate` (high)
+
+Four decisions were taken while building it, each because the obvious
+version was wrong rather than merely untidy.
+
+**Status is not a field on the editors.** `products_create` always
+creates a draft and `products_update` carries the stored status forward;
+neither schema accepts `status` at all. 12B.6 makes publishing and
+archiving high-risk while a description edit is not, and `risk` is
+declared per TOOL — one editor that also set status would be an
+unconfirmed publish tool wearing a different name. The same reasoning
+splits `collections_set_visibility` and
+`builder_options_activate`/`_deactivate` out of their editors.
+Deactivation is high and activation is medium: withdrawing an option
+takes away something a customer may be halfway through choosing, while
+offering one is additive and reversible.
+
+**Omission is not deletion.** The updaters read the record and merge what
+they were given onto what is there, and the collection-shaped fields
+(`images`, `productIds`) treat an omitted value as "leave unchanged". An
+assistant asked to fix a typo sends one field; had omission meant `null`,
+that call would have blanked the price, the SKU and every photograph —
+destruction by a medium-risk tool with no confirmation. The merge happens
+BEFORE the domain schema runs, so the schema still validates the whole
+record and 12B.11 still holds.
+
+**The writers were extracted, not reimplemented (12B.11).** The four
+Server Action creates and updates moved into `src/lib/catalog/
+write-catalog.ts` and `src/lib/builder/write-options.ts`, and the actions
+now call them. Three concrete defects forced it: the creates ended in
+`redirect()`, which THROWS and would have been mapped to INTERNAL_ERROR
+after the row was already inserted (reporting a successful write as a
+failure, the inverse of 12B.8); the actions built their own client from
+request COOKIES, which a Bearer call does not carry, so every write would
+have run anonymously and been refused by RLS; and `ActionResult` carries
+no id, which an audit row needs.
+
+**Tool schemas are not the domain schemas.** `productSchema` and friends
+are FormData-shaped — coercions, `"" | undefined` unions, transforms to
+`null` — and `z.toJSONSchema()` refuses transforms outright, so
+advertising them through `tools/list` would have thrown. The tools
+declare the plain JSON shape a model can be shown, and every value still
+passes through the domain schema before it reaches a service.
+
+Also added: `revalidatePath` on the tool side (Next's cache does not know
+a write happened outside a Server Action, so a product published through
+MCP would sit invisible on the storefront), and migration
+`0063_mcp_confirmations.sql`.
+
+Verified by `scripts/test-mcp-write.mjs` — 239 checks, including two
+concurrent confirmed calls racing for the same token, where exactly one
+must win.
 
 # MODULE 39 — MCP ORDER & PRODUCTION TOOLS
 
@@ -3754,16 +3830,24 @@ Master Plan Status:
 
 Current Module:
 
-`MODULE 37 — MCP READ TOOLS — COMPLETE`
+`MODULE 38 — MCP WRITE TOOLS & CONFIRMATION WORKFLOW — COMPLETE`
 
 Outstanding, in two independent tracks:
 
 - Deployment track: `MODULE 32 — PRODUCTION DEPLOYMENT` (not started),
   then `MODULE 33 — PRODUCTION READINESS & HANDOVER`.
-- MCP track (Phase 6, see section 12B/12C): `MODULE 38 — MCP WRITE TOOLS &
-  CONFIRMATION WORKFLOW` (not started), then 39-43. `MODULE 44 — MCP
-  CUSTOMER SELF-SERVICE READ TOOLS` (not started) is now unblocked, since
-  Module 37 is complete and its read-tool patterns exist to reuse.
+- MCP track (Phase 6, see section 12B/12C): `MODULE 39 — MCP ORDER &
+  PRODUCTION TOOLS` (not started), then 40-43. `MODULE 44 — MCP CUSTOMER
+  SELF-SERVICE READ TOOLS` (not started) is unblocked, since Module 37 is
+  complete and its read-tool patterns exist to reuse.
+
+Module 39 inherits three patterns from 38 and should not reinvent them:
+the write service lives in `src/lib/<domain>/`, not in the action; a
+partial update merges onto the stored record before the domain schema
+runs; and any status transition that 12B.6 calls high-risk is its own
+tool, not an argument on an editor. Unlike the catalogue, order and
+production statuses have workflow validation already — 39 must go
+through it rather than write a status column directly.
 
 Scope extension recorded, not built: MCP now serves customers as well as
 staff. The architecture is documented in 12B.1, 12B.2, 12B.4, 12B.9,
@@ -3782,9 +3866,9 @@ One consequence of the scope extension is recorded rather than decided:
 customer tools carry no permission key, because all 23 existing keys mean
 "any record" rather than "my record" (12B.4).
 
-Module 37 is complete. `MODULE 38 — MCP WRITE TOOLS` and `MODULE 44 — MCP
-CUSTOMER SELF-SERVICE READ TOOLS` are both now buildable; 44 is no longer
-blocked.
+Modules 37 and 38 are complete. `MODULE 39 — MCP ORDER & PRODUCTION
+TOOLS` and `MODULE 44 — MCP CUSTOMER SELF-SERVICE READ TOOLS` are both
+buildable; 44 is not blocked by 39.
 
 Modules 34, 35 remain FUTURE PHASE and are out of the current commercial
 plan.
@@ -3815,5 +3899,5 @@ stylesheet.
 
 Next Action:
 
-`Start Module 38` or `Start Module 44` (MCP track), or `Start Module 32`
+`Start Module 39` or `Start Module 44` (MCP track), or `Start Module 32`
 (deployment track)

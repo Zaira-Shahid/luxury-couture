@@ -3,6 +3,10 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
+import {
+  createBuilderOptionRecord,
+  updateBuilderOptionRecord,
+} from "@/lib/builder/write-options";
 import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
 import { builderOptionSchema, builderOptionTableSchema } from "@/lib/validations/builder-options";
@@ -41,25 +45,12 @@ export async function createBuilderOption(tableInput: string, formData: FormData
   const parsed = parseFormData(formData);
   if (!parsed.success) return { error: firstIssueMessage(parsed.error) };
 
-  const supabase = await createClient();
-  const row: Record<string, unknown> = {
-    name: parsed.data.name,
-    slug: parsed.data.slug,
-    image_url: parsed.data.imageUrl || null,
-    price_adjustment: parsed.data.priceAdjustment,
-    is_active: parsed.data.isActive,
-    sort_order: parsed.data.sortOrder,
-  };
-  if (table === "colours") row.hex_value = parsed.data.hexValue || null;
-  else row.description = parsed.data.description || null;
-
-  const { error } = await supabase.from(table).insert(row);
-  if (error) {
-    logger.error("builder option creation failed", error, { table });
-    return { error: "Could not create this option. Please try again." };
-  }
+  const result = await createBuilderOptionRecord(table, parsed.data, await createClient());
+  if (!result.ok) return { error: result.error };
 
   revalidatePath(`/admin/builder/${table}`);
+  // redirect() throws — it belongs in the wrapper, where a browser is
+  // there to receive it, not in the service MCP also calls.
   redirect(`/admin/builder/${table}`);
 }
 
@@ -75,23 +66,8 @@ export async function updateBuilderOption(
   const parsed = parseFormData(formData);
   if (!parsed.success) return { error: firstIssueMessage(parsed.error) };
 
-  const supabase = await createClient();
-  const row: Record<string, unknown> = {
-    name: parsed.data.name,
-    slug: parsed.data.slug,
-    image_url: parsed.data.imageUrl || null,
-    price_adjustment: parsed.data.priceAdjustment,
-    is_active: parsed.data.isActive,
-    sort_order: parsed.data.sortOrder,
-  };
-  if (table === "colours") row.hex_value = parsed.data.hexValue || null;
-  else row.description = parsed.data.description || null;
-
-  const { error } = await supabase.from(table).update(row).eq("id", id);
-  if (error) {
-    logger.error("builder option update failed", error, { table, id });
-    return { error: "Could not update this option. Please try again." };
-  }
+  const result = await updateBuilderOptionRecord(table, id, parsed.data, await createClient());
+  if (!result.ok) return { error: result.error };
 
   revalidatePath(`/admin/builder/${table}`);
   return undefined;

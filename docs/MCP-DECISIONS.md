@@ -121,11 +121,11 @@ products" cannot archive a different set, cannot be used on another tool,
 and cannot be used by a colleague who saw it.
 
 **Impact.** No table and no migration, at the cost recorded honestly in
-Master Build Plan 12B.14: a token is single-action but not single-use within
-its five minutes. The replay ledger arrives in Module 38 alongside the first
-genuinely destructive tool. Signing uses `MCP_CONFIRMATION_SECRET`, falling
-back to `SUPABASE_SERVICE_ROLE_KEY`; with neither, high-risk actions are
-refused rather than run unconfirmed.
+Master Build Plan 12B.14: a token was single-action but not single-use
+within its five minutes. Closed in Module 38 by the replay ledger — see
+MCP-011. Signing uses `MCP_CONFIRMATION_SECRET`, falling back to
+`SUPABASE_SERVICE_ROLE_KEY`; with neither, high-risk actions are refused
+rather than run unconfirmed.
 
 *2026-08-28 · Module 36*
 
@@ -206,3 +206,86 @@ deliberate scope deviation rather than a silent one, since the module
 boundaries were approved by the developer.
 
 *2026-08-28 · Module 36*
+
+---
+
+## MCP-011 — Spend the confirmation before acting, not after
+
+**Decision.** The dispatcher inserts the token's signature into
+`mcp_confirmations` and only then runs the handler. The signature is the
+table's primary key. A conflicting insert is `CONFLICT` and the action does
+not run; a ledger that cannot be reached at all is `INTERNAL_ERROR` and the
+action does not run either.
+
+**Reason.** Verifying the signature proves an admin confirmed this exact
+action. It does not prove the action has not already happened, because the
+token stays verifiable for its whole five minutes — the gap MCP-006
+recorded. Recording afterwards would not close it: two concurrent calls
+would both pass the check and both write before either wrote its ledger
+row. Ordering the insert first hands the race to Postgres, where a unique
+constraint settles it, instead of to whichever request arrived first.
+
+Failing closed on an unreachable ledger is the same argument. "We could not
+check whether this already ran" and "this is the first time" are different
+claims, and a destructive action must not proceed on the weaker one.
+
+**Impact.** A third place on the MCP path reaches for the service-role
+client, alongside the audit write and the rate limiter, recorded in 12B.2.
+It takes no AI-supplied input: the signature written is one the server
+computed itself. The table has RLS enabled with no write policy for anyone
+— a ledger an administrator could delete from is a ledger an administrator
+could defeat, and constraining what a confirmed admin action can do twice
+is the entire point. Only the HMAC half of the token is stored; keeping the
+assembled token would put a still-valid credential in a row.
+
+*2026-08-29 · Module 38*
+
+---
+
+## MCP-012 — A status change is its own tool, never a field on an editor
+
+**Decision.** `products_create` always creates a draft, `products_update`
+carries the stored status forward, and neither schema accepts `status`.
+Publishing and archiving are separate high-risk tools. The same split
+applies to collection visibility and to builder-option activation.
+
+**Reason.** 12B.6 makes publishing and archiving high-risk while an
+ordinary field edit is not, and `risk` is declared per TOOL rather than per
+argument. One editor that also set status would have to be either high —
+demanding a confirmation ceremony to fix a typo, which trains an
+administrator to approve without reading — or medium, which is an
+unconfirmed publish tool wearing a different name. Neither is acceptable,
+so there is no such tool.
+
+**Impact.** Eleven catalogue tools rather than six, and a model that wants
+to publish something must call a tool whose name says so. Activation is
+medium while deactivation is high, an asymmetry that follows the same rule:
+offering a new choice is additive and reversible, withdrawing one takes
+away something a customer may be halfway through choosing.
+
+*2026-08-29 · Module 38*
+
+---
+
+## MCP-013 — Omitting a field means "leave it alone"
+
+**Decision.** The write tools merge what they were given onto the stored
+record before validating it, and `images` and `productIds` treat an omitted
+value as "do not touch". An explicitly empty list still clears them.
+
+**Reason.** The admin form always posts every field, so the Server Actions
+could safely read a missing image list as "no images". A tool call is the
+opposite: an assistant asked to correct a description sends the
+description. Had the tools kept the form's reading, that call would have
+blanked the price, the SKU and every photograph — destruction performed by
+a medium-risk tool that never asks for confirmation, on behalf of an
+administrator who asked for a typo fix.
+
+**Impact.** `replaceProductImages` and `syncCollectionProducts` return
+early on `undefined` rather than deleting, and the SEO upsert reads the
+existing row when given only one of its two columns. The admin UI is
+unaffected — it still posts the whole record every time. The merge happens
+before the domain schema runs, so the schema still validates the complete
+record and 12B.11's "no second business-logic system" holds.
+
+*2026-08-29 · Module 38*

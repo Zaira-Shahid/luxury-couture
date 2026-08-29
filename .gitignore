@@ -59,6 +59,12 @@ next-env.d.ts
 # Module 36 verification artifacts (suite baselines, server log)
 .m36/
 
+# Module 37 verification artifacts
+.m37/
+
+# Module 38 verification artifacts (suite baselines, write-tool runs, server log)
+.m38/
+
 .m32/
 .photo-candidates/
 
