@@ -37,7 +37,7 @@ import { readerOptions, uuid } from "./shared";
  * sending `products` or `profiles` gets a VALIDATION_ERROR from the
  * schema; no arbitrary table name can reach the query builder.
  */
-const OPTION_SETS = {
+export const OPTION_SETS = {
   fabric: "fabrics",
   embroidery: "embroidery_types",
   colour: "colours",
@@ -46,11 +46,11 @@ const OPTION_SETS = {
   dupatta: "dupatta_options",
 } as const satisfies Record<string, BuilderOptionTable>;
 
-type OptionSetKey = keyof typeof OPTION_SETS;
+export type OptionSetKey = keyof typeof OPTION_SETS;
 
 const OPTION_SET_KEYS = Object.keys(OPTION_SETS) as [OptionSetKey, ...OptionSetKey[]];
 
-const optionSetEnum = z
+export const optionSetEnum = z
   .enum(OPTION_SET_KEYS)
   .describe("Which set of custom-builder options to read.");
 
