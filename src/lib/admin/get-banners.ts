@@ -1,29 +1,31 @@
 import { createClient } from "@/lib/supabase/server";
+import { readFailed, readerClient, type ReaderOptions } from "@/lib/supabase/reader";
 import { logger } from "@/lib/logger";
 import type { PromotionalBanner } from "@/types/database";
 
-export async function getAdminBanners(): Promise<PromotionalBanner[]> {
-  const supabase = await createClient();
+// ReaderOptions added in Module 40, when the MCP content tools became the
+// first caller of these readers that is not a page render. Omitting the
+// argument keeps the existing page behaviour exactly — see
+// lib/supabase/reader.ts for why a tool must pass its own client.
+export async function getAdminBanners(options?: ReaderOptions): Promise<PromotionalBanner[]> {
+  const supabase = await readerClient(options);
   const { data, error } = await supabase
     .from("promotional_banners")
     .select("*")
     .order("sort_order", { ascending: true });
 
-  if (error) {
-    logger.warn("failed to load promotional banners", { message: error.message });
-    return [];
-  }
+  if (error) return readFailed(error, options, [], "failed to load promotional banners");
   return (data ?? []) as PromotionalBanner[];
 }
 
-export async function getAdminBanner(id: string): Promise<PromotionalBanner | null> {
-  const supabase = await createClient();
+export async function getAdminBanner(
+  id: string,
+  options?: ReaderOptions
+): Promise<PromotionalBanner | null> {
+  const supabase = await readerClient(options);
   const { data, error } = await supabase.from("promotional_banners").select("*").eq("id", id).maybeSingle();
 
-  if (error) {
-    logger.warn("failed to load promotional banner", { id, message: error.message });
-    return null;
-  }
+  if (error) return readFailed(error, options, null, "failed to load promotional banner", { id });
   return (data ?? null) as PromotionalBanner | null;
 }
 

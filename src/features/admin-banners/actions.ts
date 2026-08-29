@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
+import { createBannerRecord, updateBannerRecord } from "@/lib/content/write-content";
 import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
 import { bannerSchema } from "@/lib/validations/marketing";
@@ -29,20 +30,24 @@ export async function createBanner(formData: FormData): Promise<ActionResult> {
   if (!parsed.success) return { error: firstIssueMessage(parsed.error) };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("promotional_banners").insert({
-    text: parsed.data.text,
-    link_url: parsed.data.linkUrl || null,
-    starts_at: parsed.data.startsAt || null,
-    expires_at: parsed.data.expiresAt || null,
-    sort_order: parsed.data.sortOrder,
-    is_active: parsed.data.isActive,
-  });
-  if (error) {
-    logger.error("banner creation failed", error);
-    return { error: "Could not create this banner." };
-  }
+  // isActive is passed because this form has always had the checkbox.
+  // No MCP tool passes it — see BannerInput.isActive.
+  const result = await createBannerRecord(
+    {
+      text: parsed.data.text,
+      linkUrl: parsed.data.linkUrl || null,
+      startsAt: parsed.data.startsAt || null,
+      expiresAt: parsed.data.expiresAt || null,
+      sortOrder: parsed.data.sortOrder,
+      isActive: parsed.data.isActive,
+    },
+    supabase
+  );
+  if (!result.ok) return { error: result.error };
 
   revalidatePath("/admin/marketing/banners");
+  // redirect() THROWS, which is why it stays in the action: a browser has
+  // a Next render to catch it and the MCP route does not.
   redirect("/admin/marketing/banners");
 }
 
@@ -51,21 +56,22 @@ export async function updateBanner(id: string, formData: FormData): Promise<Acti
   if (!parsed.success) return { error: firstIssueMessage(parsed.error) };
 
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("promotional_banners")
-    .update({
+  // The form posts every field, so passing them all preserves its
+  // "blank means clear" behaviour exactly. A tool omitting a field means
+  // something different, which the service distinguishes.
+  const result = await updateBannerRecord(
+    id,
+    {
       text: parsed.data.text,
-      link_url: parsed.data.linkUrl || null,
-      starts_at: parsed.data.startsAt || null,
-      expires_at: parsed.data.expiresAt || null,
-      sort_order: parsed.data.sortOrder,
-      is_active: parsed.data.isActive,
-    })
-    .eq("id", id);
-  if (error) {
-    logger.error("banner update failed", error, { id });
-    return { error: "Could not update this banner." };
-  }
+      linkUrl: parsed.data.linkUrl || null,
+      startsAt: parsed.data.startsAt || null,
+      expiresAt: parsed.data.expiresAt || null,
+      sortOrder: parsed.data.sortOrder,
+      isActive: parsed.data.isActive,
+    },
+    supabase
+  );
+  if (!result.ok) return { error: result.error };
 
   revalidatePath("/admin/marketing/banners");
   return undefined;
