@@ -4,9 +4,9 @@ import { revalidatePath } from "next/cache";
 
 import { getAuthUser } from "@/lib/auth/session";
 import { logger } from "@/lib/logger";
-import { logAudit } from "@/lib/security/audit";
 import { notify } from "@/lib/notifications/notify";
-import { orderConfirmedTemplate, orderMessageTemplate, orderStatusChangedTemplate, productionStartedTemplate } from "@/lib/notifications/templates";
+import { orderMessageTemplate, productionStartedTemplate } from "@/lib/notifications/templates";
+import { addOrderNoteRecord, updateOrderStatusRecord } from "@/lib/orders/write-orders";
 import { createClient } from "@/lib/supabase/server";
 import {
   addOrderNoteSchema,
@@ -35,38 +35,22 @@ export async function updateOrderStatus(orderId: string, formData: FormData): Pr
   const user = await getAuthUser();
   if (!user) return { error: "You must be signed in." };
 
-  const { data: order } = await supabase.from("orders").select("customer_id, order_number, status").eq("id", orderId).single();
-  if (!order) return { error: "Order not found." };
-
-  const { error: updateErr } = await supabase
-    .from("orders")
-    .update({ status: parsed.data.status })
-    .eq("id", orderId);
-  if (updateErr) {
-    logger.error("order status update failed", updateErr, { orderId });
-    return { error: "Could not update this order. Please try again." };
-  }
-
-  await logAudit({
-    action: "order.status_changed",
-    entityType: "order",
-    entityId: orderId,
-    before: { status: order.status },
-    after: { status: parsed.data.status },
-  });
-
-  await supabase.from("order_status_history").insert({
-    order_id: orderId,
-    status: parsed.data.status,
-    note: parsed.data.note ?? null,
-    changed_by: user.id,
-  });
-
-  const template =
-    parsed.data.status === "confirmed"
-      ? orderConfirmedTemplate(order.order_number)
-      : orderStatusChangedTemplate(order.order_number, parsed.data.status);
-  await notify(supabase, { profileId: order.customer_id, entityId: orderId, ...template });
+  // allowCorrection: an admin looking at the order they just mis-clicked
+  // is exactly who should be able to put it back, and this form has
+  // always offered every status. Module 39 gives MCP the pipeline rules
+  // without taking a capability away from the people who have it — see
+  // src/lib/orders/transitions.ts for why the asymmetry is deliberate.
+  const result = await updateOrderStatusRecord(
+    {
+      orderId,
+      status: parsed.data.status,
+      note: parsed.data.note ?? null,
+      actorId: user.id,
+      allowCorrection: true,
+    },
+    supabase
+  );
+  if (!result.ok) return { error: result.error };
 
   revalidatePath(`/admin/orders/${orderId}`);
   revalidatePath(`/account/orders/${orderId}`);
@@ -81,15 +65,11 @@ export async function addOrderNote(orderId: string, formData: FormData): Promise
   const user = await getAuthUser();
   if (!user) return { error: "You must be signed in." };
 
-  const { error } = await supabase.from("order_notes").insert({
-    order_id: orderId,
-    note: parsed.data.note,
-    created_by: user.id,
-  });
-  if (error) {
-    logger.error("order note creation failed", error, { orderId });
-    return { error: "Could not save this note. Please try again." };
-  }
+  const result = await addOrderNoteRecord(
+    { orderId, note: parsed.data.note, actorId: user.id },
+    supabase
+  );
+  if (!result.ok) return { error: result.error };
 
   revalidatePath(`/admin/orders/${orderId}`);
   return { success: true };

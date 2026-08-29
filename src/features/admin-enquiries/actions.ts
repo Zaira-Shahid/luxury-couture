@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { updateEnquiryStatusRecord } from "@/lib/enquiries/write-enquiries";
 import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
 import type { EnquiryStatus } from "@/types/database";
@@ -14,12 +15,15 @@ export async function updateEnquiryStatus(id: string, status: EnquiryStatus): Pr
   if (!VALID_STATUSES.includes(status)) return { error: "Invalid status." };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("enquiries").update({ status }).eq("id", id);
 
-  if (error) {
-    logger.error("enquiry status update failed", error, { id });
-    return { error: "Could not update. Please try again." };
-  }
+  // allowCorrection — see admin-orders/actions.ts. This screen has always
+  // let an admin pick any status, and Module 39 adds the pipeline rules
+  // for MCP without removing that.
+  const result = await updateEnquiryStatusRecord(
+    { enquiryId: id, status, allowCorrection: true },
+    supabase
+  );
+  if (!result.ok) return { error: result.error };
 
   revalidatePath("/admin/enquiries");
   revalidatePath(`/admin/enquiries/${id}`);
