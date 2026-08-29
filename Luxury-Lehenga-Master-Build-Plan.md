@@ -2589,13 +2589,25 @@ invalid input, unauthenticated access, wrong-role access, business-rule
 violations and failure handling — with the negative half carrying the
 weight, as in Module 26.
 
-## 12B.14 Known limitations (as of Module 38)
+## 12B.14 Known limitations (as of Module 40)
 
-- Thirty-five tools exist: the three system tools (Module 36), the
+- Forty-five tools exist: the three system tools (Module 36), the
   fourteen read tools (Module 37), the eleven catalogue write tools
-  (Module 38) and the seven order, production and enquiry write tools
-  (Module 39). Content, SEO and analytics have no write tool yet; those
-  arrive with Modules 40-41.
+  (Module 38), the seven order, production and enquiry write tools
+  (Module 39) and the ten content and SEO tools (Module 40). Analytics
+  has no tool yet; those arrive with Module 41.
+- 12B.12's `draft -> review -> approve -> publish` is NOT implemented as
+  four states. `blog_posts` and `pages` have two, draft and published.
+  Module 40 added the AI-generated MARKING (0064) and enforces "never
+  auto-published" by giving the drafting tool no status argument, so the
+  binding half of the rule holds. The intermediate review and approve
+  states, and a screen to move records through them, are not built.
+- `/admin/seo` and `/admin/marketing` are gated on `content.write`, but
+  migration 0054 gates `site_settings` on `settings.manage` and
+  `promotional_banners` on `marketing.write`. A marketing account can
+  therefore open /admin/seo and have every save refused by RLS. Found in
+  Module 40, not caused by it; the MCP tools take the permission the
+  database requires, so they are unaffected.
 - No customer-facing tools exist. The customer audience is SPECIFIED in
   12B.16 and scheduled as Module 44; nothing in it is built, and every
   registered tool today is admin-audience.
@@ -2960,11 +2972,76 @@ Verified by `scripts/test-mcp-orders.mjs` — 178 checks.
 
 # MODULE 40 — MCP CONTENT & SEO TOOLS
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
 
-`content_get_homepage`, `content_update_announcement`, `seo_get_settings`,
-`seo_update_settings`, `seo_update_product`, and AI drafting that obeys the
-draft -> review -> approve -> publish rule in 12B.12.
+Ten tools: `content_get_homepage`, `content_list_banners`,
+`content_create_banner`, `content_update_banner`,
+`content_set_banner_active`, `content_draft_blog_post`,
+`seo_get_settings`, `seo_update_settings`, `seo_set_indexing`,
+`seo_update_override`.
+
+Three of the five tools this module was specified with named things that
+do not exist — the second module running, which is why the warning below
+is now stated twice.
+
+**`content_update_announcement` had no target.** It names Module 3's
+single global `store.announcement_*` banner. Module 19 Pass 2 replaced
+that mechanism with `promotional_banners` — several, scheduled, each
+independently active — and `lib/settings/types.ts` records that the
+leftover keys are "harmlessly ignored". A tool written to the
+specification would have reported success and changed nothing a visitor
+could see. The four banner tools are the honest equivalent.
+
+**12B.12's `draft -> review -> approve -> publish` does not exist, and
+neither did the AI marking.** `blog_posts` and `pages` carry two states,
+draft and published. No column anywhere recorded that an AI wrote
+something. Migration `0064_ai_generated_content.sql` adds the MARKING,
+because without it AI copy is indistinguishable from a person's — exactly
+what 12B.12 forbids. It deliberately does NOT add `review` and `approved`
+states: those need a screen for a human to approve on, and two states no
+interface can clear would strand every AI draft in a status nobody can
+move. The rule is enforced by absence instead — `content_draft_blog_post`
+takes no `status` and no `ai_generated` argument, so it can only write a
+marked draft, and no MCP tool anywhere can publish content. The human
+publish action in /admin/content is the approval step. The missing
+intermediate states are recorded in 12B.14.
+
+**`seo_update_product` became `seo_update_override`**, covering products,
+collections, pages and blog posts, because `seo_metadata` is one table
+keyed by `(entity_type, entity_id)` and the service already handled all
+four. `entityType` is a domain enum stored in a column, not a table name,
+so 12B.15 holds — asserted by trying `site_settings`, `profiles` and
+`orders` as values.
+
+**A PERMISSION MISMATCH THIS MODULE FOUND, and did not create.** Module
+37's rule was "a tool takes the permission its admin page takes". For the
+catalogue, orders and production the route gate and the RLS policy agree.
+Here they do not. Migration 0054 gates `promotional_banners` on
+`marketing.write` and `site_settings` on `settings.manage`, while
+`/admin/marketing` and `/admin/seo` are both reachable with
+`content.write`. So a marketing user can open /admin/seo today and every
+save fails against RLS. That is a live bug in the admin UI, recorded in
+12B.14 rather than fixed here, because changing a route gate is a
+permissions decision rather than an MCP one.
+
+The tools take what the DATABASE requires, not what the route requires:
+banners are `marketing.write`, the two `site_settings` writers are
+`settings.manage`, blog drafting and the SEO override are `content.write`.
+Declaring the route's key would have listed tools for a role RLS then
+refuses — worse than not listing them at all.
+
+**`seo_set_indexing` is its own high-risk tool.** Editing a title costs a
+worse search snippet; blocking indexing removes the whole site from
+search, and rankings do not return the moment it is switched back on. The
+same reasoning that split `products_publish` from `products_update`.
+
+Also fixed on the way through: `setIndexingEnabled` first read an absent
+setting as "indexed". This project's default is `indexingEnabled: false`,
+so the confirmation prompt would have described a change that was not the
+one about to happen. It reads `DEFAULT_SITE_SETTINGS` now. The suite
+caught it.
+
+Verified by `scripts/test-mcp-content.mjs` — 192 checks.
 
 # MODULE 41 — MCP ANALYTICS & REPORTING TOOLS
 
@@ -3891,18 +3968,18 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULES 0-31 COMPLETE` + `MODULES 36-38 COMPLETE`
+`MODULES 0-31 COMPLETE` + `MODULES 36-39 COMPLETE`
 
 Current Module:
 
-`MODULE 39 — MCP ORDER & PRODUCTION TOOLS — COMPLETE`
+`MODULE 40 — MCP CONTENT & SEO TOOLS — COMPLETE`
 
 Outstanding, in two independent tracks:
 
 - Deployment track: `MODULE 32 — PRODUCTION DEPLOYMENT` (not started),
   then `MODULE 33 — PRODUCTION READINESS & HANDOVER`.
-- MCP track (Phase 6, see section 12B/12C): `MODULE 40 — MCP CONTENT &
-  SEO TOOLS` (not started), then 41-43. `MODULE 44 — MCP CUSTOMER
+- MCP track (Phase 6, see section 12B/12C): `MODULE 41 — MCP ANALYTICS &
+  REPORTING TOOLS` (not started), then 42-43. `MODULE 44 — MCP CUSTOMER
   SELF-SERVICE READ TOOLS` (not started) is unblocked, since Module 37 is
   complete and its read-tool patterns exist to reuse.
 
@@ -3914,11 +3991,15 @@ on an editor; and where the domain has rules, they live in a service both
 the admin UI and the tools read, with the UI free to pass
 `allowCorrection` and the tools never allowed to.
 
-A WARNING FOR 40 AND 44, learned in 39: this plan's description of what
-already exists has been wrong once. Module 39 was told to route status
-changes "through the existing workflow validation", and there was none —
-three layers of enum checking that looked like validation from a
-distance. Check what is there before building on it.
+A WARNING FOR 41 AND 44, now learned twice. This plan's description of
+what already exists has been wrong in both of the last two modules. 39
+was told to reuse workflow validation that did not exist — three layers
+of enum checking that looked like validation from a distance. 40 was
+specified with a tool for an announcement mechanism deleted in Module 19,
+and with an approval workflow that was a sentence in this plan and
+nothing in the schema. Check what is there before building on it, and
+check the RLS POLICY rather than the route gate when choosing a tool's
+permission — Module 40 found those two disagreeing.
 
 Scope extension recorded, not built: MCP now serves customers as well as
 staff. The architecture is documented in 12B.1, 12B.2, 12B.4, 12B.9,
@@ -3937,9 +4018,9 @@ One consequence of the scope extension is recorded rather than decided:
 customer tools carry no permission key, because all 23 existing keys mean
 "any record" rather than "my record" (12B.4).
 
-Modules 37, 38 and 39 are complete. `MODULE 40 — MCP CONTENT & SEO
+Modules 37 to 40 are complete. `MODULE 41 — MCP ANALYTICS & REPORTING
 TOOLS` and `MODULE 44 — MCP CUSTOMER SELF-SERVICE READ TOOLS` are both
-buildable; 44 is not blocked by 40.
+buildable; 44 is not blocked by 41.
 
 Modules 34, 35 remain FUTURE PHASE and are out of the current commercial
 plan.
@@ -3970,5 +4051,5 @@ stylesheet.
 
 Next Action:
 
-`Start Module 40` or `Start Module 44` (MCP track), or `Start Module 32`
+`Start Module 41` or `Start Module 44` (MCP track), or `Start Module 32`
 (deployment track)

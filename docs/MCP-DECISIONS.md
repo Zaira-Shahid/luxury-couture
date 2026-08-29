@@ -372,3 +372,96 @@ inspection is internal until somebody decides what it means. The two
 permissions are tested in both directions.
 
 *2026-08-29 · Module 39*
+
+
+---
+
+## MCP-017 — A tool takes the permission its TABLE requires, not its page
+
+**Decision.** Module 40's tools declare the permission the RLS policy
+demands: `marketing.write` for the banner tools, `settings.manage` for
+the two that write `site_settings`, `content.write` for blog drafting and
+the SEO override. This overrides Module 37's rule for this module.
+
+**Reason.** Module 37 set "a tool takes the permission its admin page
+takes", and for the catalogue, orders and production the route gate and
+the RLS policy agree, so the rule was never tested. They disagree here.
+`/admin/seo` and `/admin/marketing` are both reachable with
+`content.write`, while migration 0054 gates `site_settings` on
+`settings.manage` and `promotional_banners` on `marketing.write`.
+
+Following Module 37's rule would have listed `seo_update_settings` for a
+marketing account and had Postgres refuse every call — a tool that
+appears in `tools/list`, accepts its arguments, and then fails. That is
+worse than not offering it, because an assistant will retry a tool it can
+see.
+
+**Impact.** `content_get_homepage` and `content_list_banners` are
+separate tools rather than one, because the homepage copy is public-read
+`site_settings` while listing hidden banners is `marketing.write`; one
+tool returning both would have to demand the stricter key to read the
+freely readable half.
+
+The mismatch itself is a live bug in the admin UI — a marketing user can
+open /admin/seo and have every save refused — recorded in 12B.14 and NOT
+fixed here, because changing a route gate is a permissions decision.
+
+*2026-08-29 · Module 40*
+
+---
+
+## MCP-018 — 12B.12 is enforced by absence, not by a workflow
+
+**Decision.** `content_draft_blog_post` takes no `status` argument and no
+`ai_generated` argument. It always writes a draft, always marked.
+Migration 0064 adds the marking columns; it does not add `review` and
+`approved` states.
+
+**Reason.** 12B.12 requires three things of AI-written copy: that it is
+marked, that it is never published automatically, and that it is never
+presented as human-authored. None of the three was implemented — no
+column recorded that an AI wrote anything, and `blog_posts` and `pages`
+carry two states, not four.
+
+The marking had no honest workaround, so it was added. The four-state
+workflow was not, because states need a screen to move records through:
+inventing `review` and `approved` with no interface to clear them would
+strand every AI draft in a status nobody could move, which is worse than
+the gap it closes.
+
+What remains is the binding half, and it is enforced by a stronger
+mechanism than a check — a rule that cannot be broken by an argument that
+does not exist. No MCP tool anywhere can publish content, so the human
+publish action in /admin/content is both the review and the approval.
+
+**Impact.** The tool refuses `status`, `publishedAt`, `aiGenerated` and
+`ai_generated` as unknown fields, each asserted in
+`test-mcp-content.mjs`, along with a database-wide check that no
+`ai_generated` post is published. The missing intermediate states are
+recorded in 12B.14 rather than claimed.
+
+*2026-08-29 · Module 40*
+
+---
+
+## MCP-019 — `content_update_announcement` was built as banner tools
+
+**Decision.** The specified `content_update_announcement` tool was not
+built. Four tools against `promotional_banners` were built instead.
+
+**Reason.** The tool names Module 3's single global
+`store.announcement_*` banner. Module 19 Pass 2 replaced that mechanism
+with `promotional_banners` — several, scheduled, each independently
+active — and `lib/settings/types.ts` records that the leftover settings
+keys are "harmlessly ignored". A tool written to the specification would
+have written keys nothing reads: it would have reported success and
+changed nothing a visitor could see, which is the failure mode 12B.8
+exists to prevent, arriving through the front door.
+
+**Impact.** Creating a banner leaves it HIDDEN and
+`content_set_banner_active` is high risk and confirmed, following Module
+38's split of `collections_set_visibility`. The banner editor cannot
+switch one on: `isActive` reaches the service only from the admin form,
+which has always had the checkbox.
+
+*2026-08-29 · Module 40*
