@@ -11,6 +11,7 @@ import {
 } from "./confirm";
 import type { McpActor, McpContext } from "./context";
 import { McpError, toMcpError } from "./errors";
+import { consumeConfirmation } from "./replay";
 import {
   isNotification,
   JSON_RPC,
@@ -232,6 +233,35 @@ async function executeTool(
           expiresInSeconds: CONFIRMATION_TTL_SECONDS,
         });
         return response;
+      }
+
+      // The token is valid. SPEND IT BEFORE ACTING (Module 38, 0063).
+      //
+      // The signature check alone proves "an admin confirmed this exact
+      // action", not "this action has not already run" — the token is
+      // stateless and stays verifiable for its whole five-minute life.
+      // Consuming first is what makes the second call lose: the ledger's
+      // unique constraint decides the race, not the order two concurrent
+      // requests happen to reach the handler.
+      const spent = await consumeConfirmation({
+        token: provided!,
+        actorId: deps.actor.id,
+        toolName: tool.name,
+      });
+      if (spent === "already-used") {
+        throw new McpError(
+          "CONFLICT",
+          "That confirmation has already been used. Nothing was done a second time."
+        );
+      }
+      if (spent === "unavailable") {
+        // Fails closed. "We could not check whether this already ran" is
+        // not the same claim as "this is the first time", and a
+        // destructive action must not run on the weaker one.
+        throw new McpError(
+          "INTERNAL_ERROR",
+          "This action could not be confirmed safely. No changes were made."
+        );
       }
     }
 
