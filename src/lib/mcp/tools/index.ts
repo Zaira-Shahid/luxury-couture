@@ -2,6 +2,7 @@ import { buildRegistry } from "../registry";
 
 import { catalogTools } from "./catalog";
 import { catalogWriteTools } from "./catalog-write";
+import { contentTools } from "./content-write";
 import { customerTools } from "./customers";
 import { enquiriesWriteTools } from "./enquiries-write";
 import { enquiryTools } from "./enquiries";
@@ -9,6 +10,7 @@ import { orderTools } from "./orders";
 import { orderWriteTools } from "./orders-write";
 import { productionTools } from "./production";
 import { productionWriteTools } from "./production-write";
+import { seoTools } from "./seo-write";
 import { systemTools } from "./system";
 
 /**
@@ -31,7 +33,7 @@ import { systemTools } from "./system";
  *                             customers, production, builder options [DONE]
  *   Module 38 — write tools:  products, collections, builder options [DONE]
  *   Module 39 — orders and production status [DONE]
- *   Module 40 — content and SEO
+ *   Module 40 — content and SEO [DONE]
  *   Module 41 — analytics summaries
  */
 export const toolRegistry = buildRegistry([
@@ -45,4 +47,6 @@ export const toolRegistry = buildRegistry([
   ...customerTools,
   ...productionTools,
   ...productionWriteTools,
+  ...contentTools,
+  ...seoTools,
 ]);

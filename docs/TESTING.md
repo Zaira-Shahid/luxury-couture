@@ -48,6 +48,21 @@ exactly who should be able to move an order backward; the tools must never pass 
 split of migration 0054 is checked in both directions: a `production` account cannot record a
 quality check, a `qc` account cannot move the work.
 
+`test-mcp-content.mjs` (Module 40) is the fourth. Its weight sits on rules that must hold
+against a caller looking for a way around them rather than against a bug. 12B.12 forbids
+publishing AI-written copy automatically, so the script hunts the loophole: `status`,
+`publishedAt`, `aiGenerated` and `ai_generated` are each sent to the drafting tool and each must
+be refused as an unknown field, and a database-wide count then asserts that no AI-generated post
+is published anywhere. The same shape covers the settings namespace — `site_settings` holds the
+currency and the theme beside the SEO defaults, so the script tries to write `store.currency`
+through the SEO editor and checks the currency afterwards.
+
+One of its checks exists because the script broke the site while being written. `seo_set_indexing`
+blocks search engines for the whole site; a run that left it blocked would delist the storefront
+and fail every later SEO script in the suite. So the original value is captured before anything
+runs and restored in the cleanup unconditionally. Writing that test also caught a real defect:
+the service read an absent setting as "indexed" when this project's default is the opposite.
+
 **Most of it is negative, and that is the design.** The checks that matter are: an anonymous
 caller refused, a customer refused, a production account refused a tool it was never shown
 (hiding a tool is not the enforcement), twelve shapes of `execute_sql`/`shell`/`read_file`

@@ -85,7 +85,7 @@ rather than partially processed. `GET` returns `405`.
 
 ## The tools
 
-Thirty-five, added per module (Master Build Plan 12C). Everything the AI
+Forty-five, added per module (Master Build Plan 12C). Everything the AI
 can do in this application is this list and nothing else.
 
 **System (Module 36)**
@@ -151,7 +151,42 @@ that split: `production_record_qc` writes a history row at the job's
 current stage and changes no status, and a `production` account cannot
 call it.
 
-Two shapes recur and are deliberate.
+**Write (Module 40)** — ten content and SEO tools, and the permission
+column is the one to read carefully:
+
+| Tool | Permission | Risk | What it does |
+| --- | --- | --- | --- |
+| `content_get_homepage` | `content.write` | low | hero copy, imagery, homepage SEO |
+| `content_list_banners` | `marketing.write` | low | every banner, hidden ones included |
+| `content_create_banner` | `marketing.write` | medium | creates a HIDDEN banner |
+| `content_update_banner` | `marketing.write` | medium | text, link, schedule; cannot show it |
+| `content_set_banner_active` | `marketing.write` | high | shows or hides one |
+| `content_draft_blog_post` | `content.write` | medium | saves a marked AI DRAFT; cannot publish |
+| `seo_get_settings` | `content.write` | low | the site-wide SEO defaults |
+| `seo_update_settings` | `settings.manage` | medium | titles, descriptions, OG image, handles |
+| `seo_set_indexing` | `settings.manage` | high | allows or blocks search indexing site-wide |
+| `seo_update_override` | `content.write` | medium | one product/collection/page/post's metadata |
+
+**A tool takes the permission its TABLE requires, not its page.** Module
+37's rule was the page's permission, and for the catalogue, orders and
+production the route gate and the RLS policy agree. They do not here:
+`/admin/seo` and `/admin/marketing` are reachable with `content.write`,
+while migration 0054 gates `site_settings` on `settings.manage` and
+`promotional_banners` on `marketing.write`. A tool declaring the route's
+key would be listed for a role the database then refuses — a tool that
+appears to exist and fails on use. (The same mismatch means a marketing
+user can open /admin/seo today and have every save refused. That is a
+pre-existing bug in the admin UI, recorded in 12B.14.)
+
+**AI-drafted content is never published and always marked.** 12B.12
+forbids automatic publication of AI-written copy.
+`content_draft_blog_post` has no `status` argument and no `ai_generated`
+argument, so the rule is enforced by absence rather than by a check:
+every post it writes is a draft flagged `ai_generated` (migration 0064).
+No MCP tool anywhere can publish content — that stays a person's action
+in /admin/content, which is also the review step.
+
+**Two shapes recur and are deliberate.**
 
 **A status change is never a field on an editor.** Publishing and
 archiving are high-risk under 12B.6 and a description edit is not, and

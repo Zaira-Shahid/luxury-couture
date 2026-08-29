@@ -3,6 +3,11 @@
 import { revalidatePath } from "next/cache";
 
 import { logger } from "@/lib/logger";
+import {
+  saveSeoOverrideRecord,
+  setIndexingEnabled,
+  updateSeoDefaultsRecord,
+} from "@/lib/seo/write-seo";
 import { createClient } from "@/lib/supabase/server";
 import { seoDefaultsSchema, seoOverrideSchema } from "@/lib/validations/seo";
 
@@ -36,34 +41,27 @@ export async function updateSeoDefaults(formData: FormData): Promise<ActionResul
   if (!parsed.success) return { error: firstIssueMessage(parsed.error) };
 
   const supabase = await createClient();
-  const entries: { key: string; value: string | boolean }[] = [
-    { key: "seo.default_title", value: parsed.data.defaultTitle ?? "" },
-    { key: "seo.default_description", value: parsed.data.defaultDescription ?? "" },
-    { key: "seo.default_og_image_url", value: parsed.data.defaultOgImageUrl ?? "" },
-    { key: "seo.twitter_handle", value: parsed.data.twitterHandle ?? "" },
-    { key: "seo.google_site_verification", value: parsed.data.googleSiteVerification ?? "" },
-    { key: "seo.indexing_enabled", value: parsed.data.indexingEnabled },
-  ];
 
-  const toUpsert = entries.filter((e) => e.value !== "");
-  const toDelete = entries.filter((e) => e.value === "").map((e) => e.key);
+  // The form posts every field, so passing them all preserves its
+  // "blank clears the row" behaviour exactly. A tool omitting a field
+  // means "leave it alone", which the service distinguishes.
+  const result = await updateSeoDefaultsRecord(
+    {
+      defaultTitle: parsed.data.defaultTitle ?? "",
+      defaultDescription: parsed.data.defaultDescription ?? "",
+      defaultOgImageUrl: parsed.data.defaultOgImageUrl ?? "",
+      twitterHandle: parsed.data.twitterHandle ?? "",
+      googleSiteVerification: parsed.data.googleSiteVerification ?? "",
+    },
+    supabase
+  );
+  if (!result.ok) return { error: result.error };
 
-  if (toUpsert.length > 0) {
-    const { error } = await supabase
-      .from("site_settings")
-      .upsert(toUpsert, { onConflict: "key" });
-    if (error) {
-      logger.error("seo defaults update failed", error);
-      return { error: "Could not save these settings." };
-    }
-  }
-  if (toDelete.length > 0) {
-    const { error } = await supabase.from("site_settings").delete().in("key", toDelete);
-    if (error) {
-      logger.error("seo defaults clear failed", error);
-      return { error: "Could not clear the empty fields." };
-    }
-  }
+  // Indexing is a separate service call because it is a separate tool —
+  // see lib/seo/write-seo.ts. This form still saves both together, as it
+  // always has.
+  const indexing = await setIndexingEnabled(parsed.data.indexingEnabled, supabase);
+  if (!indexing.ok) return { error: indexing.error };
 
   // Site-wide metadata touches every route, so revalidate the layout.
   revalidatePath("/", "layout");
@@ -71,11 +69,6 @@ export async function updateSeoDefaults(formData: FormData): Promise<ActionResul
   return undefined;
 }
 
-/**
- * Creates or replaces one entity's `seo_metadata` row. The table has a
- * unique (entity_type, entity_id) constraint from 0011, so upsert on that
- * pair is the natural write — one override per entity, never duplicates.
- */
 export async function saveSeoOverride(formData: FormData): Promise<ActionResult> {
   const parsed = seoOverrideSchema.safeParse({
     entityType: formData.get("entityType"),
@@ -88,21 +81,18 @@ export async function saveSeoOverride(formData: FormData): Promise<ActionResult>
   if (!parsed.success) return { error: firstIssueMessage(parsed.error) };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("seo_metadata").upsert(
+  const result = await saveSeoOverrideRecord(
     {
-      entity_type: parsed.data.entityType,
-      entity_id: parsed.data.entityId,
-      meta_title: parsed.data.metaTitle || null,
-      meta_description: parsed.data.metaDescription || null,
-      og_image_url: parsed.data.ogImageUrl || null,
-      canonical_url: parsed.data.canonicalUrl || null,
+      entityType: parsed.data.entityType,
+      entityId: parsed.data.entityId,
+      metaTitle: parsed.data.metaTitle ?? "",
+      metaDescription: parsed.data.metaDescription ?? "",
+      ogImageUrl: parsed.data.ogImageUrl ?? "",
+      canonicalUrl: parsed.data.canonicalUrl ?? "",
     },
-    { onConflict: "entity_type,entity_id" }
+    supabase
   );
-  if (error) {
-    logger.error("seo override save failed", error, { entityType: parsed.data.entityType });
-    return { error: "Could not save this SEO override." };
-  }
+  if (!result.ok) return { error: result.error };
 
   revalidatePath("/admin/seo");
   revalidatePath("/", "layout");
