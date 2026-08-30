@@ -79,6 +79,31 @@ because an assistant will repeat it.
 the orders they placed — rather than against a regex for what an email looks like. The rule is
 that this specific person cannot be found in an analytics answer.
 
+`test-admin-assistant.mjs` (Module 42) is the sixth, and the first that tests a LOOP rather than
+an endpoint. Nothing it does spends an API call: the model is a script of canned responses, so
+each check names one model output and asserts what the loop did with it. Everything under the
+loop is real — the registry, the dispatcher, the permission check, the HMAC tokens, the replay
+ledger, the audit write.
+
+That needed a harness. `scripts/lib/ts-node-hook.mjs` teaches Node's own type stripping this
+project's `@/` alias and TypeScript's extensionless imports, so `src/lib/mcp/chat.ts` can be
+imported and driven directly; `scripts/unit/*.test.mjs` already import `.ts` modules this way,
+but only ones with no imports of their own. Only `react` is substituted, and only its `cache`
+function, which the auth chain pulls in.
+
+Its centre is the claim the module is built on: the model never holds a confirmation token. A
+high-risk call must stop the loop with nothing archived, the returned conversation must contain
+no token anywhere in it, and the model must not be asked to continue. Approval is tested from
+the other side — the action runs exactly once, the signature lands in the replay ledger, the
+write lands in `audit_logs`, and an approval pointed at a tool the registry does not call high
+risk is refused BEFORE anything is dispatched. That last check exists because the first draft
+did dispatch first, which would have executed a low-risk write and then reported that nothing
+had changed.
+
+The rest is the negative half: a customer refused, an anonymous request refused, an over-long
+message refused before the model is reached, a malformed approval not treated as an approval,
+and a model that never stops ending the turn as a failure rather than as an answer.
+
 **Most of it is negative, and that is the design.** The checks that matter are: an anonymous
 caller refused, a customer refused, a production account refused a tool it was never shown
 (hiding a tool is not the enforcement), twelve shapes of `execute_sql`/`shell`/`read_file`

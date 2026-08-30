@@ -18,6 +18,7 @@ import {
   Settings,
   ShieldCheck,
   ShoppingBag,
+  Sparkles,
   Star,
   Tags,
   Truck,
@@ -63,7 +64,12 @@ export function navGroupsFor(permissions: Set<string>): AdminNavGroup[] {
 export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
   {
     label: "Overview",
-    items: [{ href: "/admin", label: "Dashboard", icon: LayoutDashboard }],
+    items: [
+      { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+      // No permission of its own: the assistant can only do what the
+      // signed-in account can, tool by tool (Module 42).
+      { href: "/admin/assistant", label: "Assistant", icon: Sparkles },
+    ],
   },
   {
     label: "Sales",

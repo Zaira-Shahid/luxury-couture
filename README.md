@@ -299,8 +299,8 @@ src/
     (storefront)/    public site — home, catalogue, builder, cart, checkout, blog
     (auth)/          sign in, register, password reset, callback
     (account)/       customer dashboard — orders, measurements, wishlist, notifications
-    (admin)/         58 admin screens
-    api/             chat, webhooks, cron
+    (admin)/         59 admin screens, including the AI assistant
+    api/             chat, MCP, the admin assistant, webhooks, cron
   components/
     ui/              shadcn primitives on Base UI
     builder/         the nine-step custom builder
@@ -311,10 +311,10 @@ src/
     supabase/        browser, server and middleware clients
     auth/            session, roles, permissions
     ai/              provider interface, guardrails, query intent
-    mcp/             MCP server, tool registry, authorization, audit
+    mcp/             MCP server, tool registry, authorization, audit, admin chat loop
     validations/     Zod schemas for every Server Action
 docs/                fourteen documents, one per subsystem
-scripts/             migration runner, 42 test scripts, seeders, verifiers
+scripts/             migration runner, 48 test scripts, seeders, verifiers
 supabase/migrations/ 62 SQL migrations, applied in filename order
 ```
 

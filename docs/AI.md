@@ -180,6 +180,29 @@ if you ever need to switch the assistant off quickly.
 
 ---
 
+## The admin assistant (Module 42)
+
+`/admin/assistant` is the staff-facing chat, and it is the ONE AI feature with no free
+fallback. Everything above works with no key because a template or a word-overlap match can
+stand in for a sentence; nothing can stand in for an assistant that reads your orders and
+changes your catalogue. Without `ANTHROPIC_API_KEY` the screen says so and refuses.
+
+It is not the customer chatbot with more permissions. It calls the MCP tool layer — fifty
+registered tools, each with the permission its data requires — through the same dispatcher an
+external MCP client would use, so it can only do what the signed-in person could do by hand.
+Three things follow, and `docs/MCP.md` is the full account:
+
+- **It cannot approve its own high-risk actions.** Archiving, publishing, refunds and the rest
+  stop the conversation and show you what would change. The model is never given the token that
+  runs them; only your click is.
+- **It cannot see past your permissions.** A production account gets an assistant that reads
+  orders and cannot touch the blog, without being told the blog tools exist.
+- **It cannot claim work it did not do.** A refused or failed tool call comes back marked as an
+  error, and the system prompt's first rule is to say what happened rather than to sound
+  finished.
+
+Conversations are not saved anywhere. Closing the tab ends one.
+
 ## Occasions
 
 Module 23 added an **occasions** taxonomy (bridal, mehndi, walima, reception, engagement, party),
@@ -219,6 +242,12 @@ sitelinks searchbox Google may show now actually works.
   occasion results once you tag it — a new product belongs to no occasion by default.
 - **The assistant matches words, not meaning**, on the free engine: "something sparkly" finds
   nothing unless a real colour, fabric or occasion is named. Turning on Claude fixes this.
+- **The admin assistant has never run against a live model either**, for the same reason as the
+  bullet above. Its loop is tested exhaustively with a scripted model — the confirmation stop,
+  the permission filter, the iteration cap, the failure paths — but no check spends an API call.
+  Set a key and try it first on an account with few permissions.
+- **The admin assistant does not stream.** A question that needs several tool calls shows
+  "Working…" until the whole turn is done.
 - **Rate limiting is database-backed, not distributed-strict.** Adequate here; worth revisiting in
   Module 29 (security audit).
 - Guardrails are pattern-based. They are tested against a wide set of real phrasings, but a
