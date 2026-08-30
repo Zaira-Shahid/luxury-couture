@@ -74,6 +74,9 @@ next-env.d.ts
 # Module 41 verification artifacts
 .m41/
 
+# Module 42 verification artifacts
+.m42/
+
 .m32/
 .photo-candidates/
 
