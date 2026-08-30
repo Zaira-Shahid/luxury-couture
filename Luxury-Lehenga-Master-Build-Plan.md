@@ -2589,7 +2589,7 @@ invalid input, unauthenticated access, wrong-role access, business-rule
 violations and failure handling — with the negative half carrying the
 weight, as in Module 26.
 
-## 12B.14 Known limitations (as of Module 41)
+## 12B.14 Known limitations (as of Module 42)
 
 - Fifty tools exist: the three system tools (Module 36), the fourteen
   read tools (Module 37), the eleven catalogue write tools (Module 38),
@@ -2626,6 +2626,24 @@ weight, as in Module 26.
 - `customers_search` matches on name only. There is no email search,
   because `customers_search` deliberately returns no contact details.
 - No streaming, no MCP resources, no prompts, no sampling — `tools/*` only.
+- THE ADMIN CHAT IS UNTESTED AGAINST A LIVE MODEL. Module 42's 84 checks
+  drive the real loop, the real dispatcher, the real confirmation gate and
+  the real replay ledger — with a SCRIPTED model. That proves what the
+  loop does with a given model output; it proves nothing about what the
+  model does with a given question. No suite spends an API call, and this
+  deployment has no `ANTHROPIC_API_KEY` set, so the screen has never been
+  exercised end to end. First run with a key is the real acceptance test.
+- The chat holds its conversation in the browser and nothing else. Closing
+  the tab ends it; there is no history, no resume and no transcript to
+  audit — only the per-call audit rows every tool already writes. A
+  transcript table was rejected (MCP-024), not forgotten.
+- The chat is not streamed. A turn that makes several tool calls shows
+  "Working…" until the whole turn finishes, which on a slow multi-tool
+  question is several seconds of nothing. Streaming would need the route
+  to hold a stream open through the loop, and was not built.
+- A turn is capped at 12 iterations and reported as a failure past that.
+  A question genuinely needing more tool calls than that cannot be
+  answered by asking harder; it needs a tool that answers it in one.
 - CLOSED IN MODULE 38. Confirmation tokens are still stateless HMACs, but
   the dispatcher now SPENDS one before acting, against the ledger in
   `0063_mcp_confirmations.sql`. The signature is the primary key, so two
@@ -3108,11 +3126,42 @@ Verified by `scripts/test-mcp-analytics.mjs` — 95 checks.
 
 # MODULE 42 — ADMIN AI CHAT INTERFACE
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE
 
 The in-dashboard chat that drives the MCP tools, including the human
 confirmation step for high-risk actions and a plain-language rendering of
-tool results. Do not build before this module.
+tool results.
+
+Built:
+
+- `src/lib/mcp/chat.ts` — the loop. `runAssistantTurn()` takes the
+  conversation and a message and returns it answered, failed, or stopped
+  awaiting a person. `resumeWithApproval()` is the separate entry point a
+  click reaches.
+- `POST /api/admin/assistant` — HTTP only: parse, authenticate through
+  `resolveCaller()`, rate limit per actor at 20 turns, dispatch.
+- `/admin/assistant` and `components/admin/assistant-chat.tsx` — the
+  screen, the transcript, the tool-call disclosure and the approval card.
+- `scripts/test-admin-assistant.mjs` — 84 checks, with
+  `scripts/lib/assistant-loop-checks.mjs` driving the real loop from a
+  scripted model and `scripts/lib/ts-node-hook.mjs` letting Node import
+  the `.ts` modules to do it.
+
+The four decisions are MCP-022 to MCP-025 in `docs/MCP-DECISIONS.md`. The
+first is the module: THE MODEL NEVER HOLDS A CONFIRMATION TOKEN. Handing
+it both halves of the two-step would have kept the ceremony 12B.6 asks
+for and lost its purpose, so the loop stops at `CONFIRMATION_REQUIRED`
+and the server supplies the token only after a human approves.
+
+One defect was found and fixed while testing that: the first draft
+dispatched whatever tool an approval named, which for a tool that is NOT
+high risk would have executed it and then reported "nothing was changed".
+An approval is now refused unless the registry itself calls the tool high
+risk, before anything is dispatched.
+
+Nothing was needed from the model's own judgement about safety, and
+nothing depends on it: filtering the tool list to the actor is a
+usability measure, and the dispatcher refuses a hidden tool anyway.
 
 # MODULE 43 — MCP PRODUCTION HARDENING & OBSERVABILITY
 
@@ -4023,22 +4072,29 @@ The architecture must make future upgrades straightforward.
 
 Master Plan Status:
 
-`MODULES 0-31 COMPLETE` + `MODULES 36-40 COMPLETE`
+`MODULES 0-31 COMPLETE` + `MODULES 36-41 COMPLETE`
 
 Current Module:
 
-`MODULE 41 — MCP ANALYTICS & REPORTING TOOLS — COMPLETE`
+`MODULE 42 — ADMIN AI CHAT INTERFACE — COMPLETE`
 
 Outstanding, in two independent tracks:
 
 - Deployment track: `MODULE 32 — PRODUCTION DEPLOYMENT` (not started),
   then `MODULE 33 — PRODUCTION READINESS & HANDOVER`.
-- MCP track (Phase 6, see section 12B/12C): `MODULE 42 — ADMIN AI CHAT
-  INTERFACE` (not started), then 43. `MODULE 44 — MCP CUSTOMER
+- MCP track (Phase 6, see section 12B/12C): `MODULE 43 — MCP PRODUCTION
+  HARDENING & OBSERVABILITY` (not started). `MODULE 44 — MCP CUSTOMER
   SELF-SERVICE READ TOOLS` (not started) is unblocked, since Module 37 is
-  complete and its read-tool patterns exist to reuse. Module 42 is the
-  first module in this track with a user interface, and the first that
-  consumes the registry rather than adding to it.
+  complete and its read-tool patterns exist to reuse.
+
+Module 42 was the first module in this track with a user interface and
+the first to consume the registry rather than add to it. Its one
+non-obvious consequence for 43 and 44: the assistant has never run
+against a live model on this deployment, because no `ANTHROPIC_API_KEY`
+is set here. Everything it does with a given model output is tested;
+nothing proves how the model behaves at the keyboard. Whoever sets the
+key first is running the acceptance test, and should do it on a staff
+account that holds few permissions, so a wrong answer is cheap.
 
 Module 40 inherits four patterns and should not reinvent them: the write
 service lives in `src/lib/<domain>/`, not in the action; a partial update
@@ -4081,9 +4137,16 @@ customer tools carry no permission key, because all 23 existing keys mean
 "any record" rather than "my record" (12B.4).
 
 Modules 37 to 41 are complete, which is every tool-building module the
-roadmap specified. `MODULE 42 — ADMIN AI CHAT INTERFACE` and `MODULE 44 —
-MCP CUSTOMER SELF-SERVICE READ TOOLS` are both buildable; 44 is not
-blocked by 42.
+roadmap specified, and Module 42 has now consumed them. `MODULE 43` and
+`MODULE 44` are both buildable and neither blocks the other.
+
+A FOURTH WRONG PREMISE, and the mildest so far. This plan said the chat
+would need "a plain-language rendering of tool results". The model's own
+prose is that rendering; a second one built in the UI would have been the
+structured result shown twice, once in a sentence and once as JSON. What
+the screen actually needed was the opposite — a way to see WHICH tools
+ran, since the sentence never says. The transcript lists each call and
+opens its arguments on demand.
 
 Modules 34, 35 remain FUTURE PHASE and are out of the current commercial
 plan.
@@ -4114,5 +4177,5 @@ stylesheet.
 
 Next Action:
 
-`Start Module 42` or `Start Module 44` (MCP track), or `Start Module 32`
+`Start Module 43` or `Start Module 44` (MCP track), or `Start Module 32`
 (deployment track)

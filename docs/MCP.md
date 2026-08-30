@@ -1,6 +1,6 @@
 # MCP — the AI application control layer
 
-Modules 36-38. The authoritative architecture record is section 12B of
+Modules 36-42. The authoritative architecture record is section 12B of
 `Luxury-Lehenga-Master-Build-Plan.md`; this document is the working
 reference for someone about to add a tool or debug a call.
 
@@ -296,6 +296,41 @@ could not check" is not "this is the first time". The table has RLS on
 with no write policy at all, because a ledger an administrator could
 delete from is one they could defeat.
 
+## The admin chat (Module 42)
+
+`/admin/assistant` is the in-dashboard chat, `POST /api/admin/assistant`
+is its endpoint and `src/lib/mcp/chat.ts` is the loop. Two rules shape all
+three.
+
+**The model never holds a confirmation token.** When a tool answers
+`CONFIRMATION_REQUIRED` the loop STOPS. The proposal goes to the person,
+the conversation comes back unfinished, and only a click resumes it —
+through `resumeWithApproval()`, a separate export the model's output
+cannot reach. That function asks the dispatcher for a fresh proposal,
+takes the token from the reply and spends it immediately, so the token
+exists for one server-side moment and never crosses the network. An
+approval naming a tool the registry does not call high risk is refused
+before anything is dispatched.
+
+**Every call goes through `handleJsonRpc()`.** The chat builds the same
+JSON-RPC request the HTTP route does. There is no second path to a
+handler, so authorization, validation, the replay ledger, redaction and
+the audit row apply unchanged.
+
+The rest follows from those. The registry is filtered to the actor before
+the model sees it — a usability measure, not the enforcement. The
+conversation lives in the browser and is never persisted (MCP-024). The
+turn is capped at 12 iterations and reported as a FAILURE if it runs out,
+because a truncated agentic run that reads like an answer is the shape of
+a confident wrong result. The screen itself is open to any staff account,
+since each tool carries its own permission (MCP-025).
+
+Rate limited at 20 turns per window per actor — lower than the tool limit,
+because one turn can be several model calls and several tool calls.
+
+Without `ANTHROPIC_API_KEY` the route answers 503 and says so; the rest of
+the dashboard is unaffected.
+
 ## Errors
 
 Tools return one of: `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`,
@@ -341,6 +376,7 @@ npm run build && npx next start          # the suites need a running server
 node --env-file=.env.local scripts/test-mcp.mjs         # 127 — the foundation
 node --env-file=.env.local scripts/test-mcp-read.mjs    # 245 — the read tools
 node --env-file=.env.local scripts/test-mcp-write.mjs   # 239 — the write tools
+node --env-file=.env.local scripts/test-admin-assistant.mjs  # 84 — the admin chat
 ```
 
 Each has the same two halves. Part A asserts invariants at the source —
@@ -359,8 +395,13 @@ exactly one must win.
 
 ## Known limitations
 
-- Catalogue writes only. Orders, production, content, SEO and analytics
-  are readable but not writable; those tools arrive with Modules 39-41.
+- Fifty tools: three system, fourteen read, and the write and reporting
+  sets added by Modules 38-41. Every tool the roadmap specified through
+  Module 41 exists.
+- The admin chat is untested against a live model. Everything the loop
+  does with a given model output is tested with a scripted client, and
+  the route is tested without one; no suite spends an API call, so
+  nothing here proves how the real model behaves at the keyboard.
 - No customer-facing tools. Every registered tool is admin-audience;
   the customer set is specified in 12B.16 and scheduled as Module 44.
 - Writes are audited but not diffed: the audit row records the request,

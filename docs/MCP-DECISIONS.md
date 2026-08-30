@@ -523,3 +523,115 @@ only, and a period with no previous activity reports a null change rather
 than a percentage against zero.
 
 *2026-08-29 · Module 41*
+
+---
+
+## MCP-022 — The model never holds a confirmation token
+
+**Decision.** `runAssistantTurn()` STOPS when a tool answers
+`CONFIRMATION_REQUIRED`. Resuming is a separate export,
+`resumeWithApproval()`, which only a person's click reaches: the server
+re-requests the proposal, takes the token from that reply and spends it
+in the same function. No token is returned to the browser, put in the
+conversation, or shown to the model.
+
+**Reason.** Module 36 made high-risk tools two-step so that a human sees
+what would change before it changes. Letting the assistant carry the
+token through both steps would keep the ceremony and lose the point — the
+model would read its own proposal, find it reasonable, and pass the token
+straight back. The "human confirmation step" the Master Build Plan asks
+for would exist in the transcript and nowhere else.
+
+A token that reached the browser would also be a token an XSS could
+spend, which is why the approval round-trip carries the tool name, the
+arguments the person was shown, and nothing else.
+
+**Impact.** One thing had to change in the loop as a result. The first
+draft of `resumeWithApproval()` dispatched whatever tool the approval
+named and inspected the answer. For a tool that is not high risk that
+dispatch IS the action: a forged approval naming a low-risk write would
+have run it, and then been reported as "nothing was changed" — the exact
+inversion 12B.8 forbids. The registry is now consulted first, and an
+approval for anything the registry does not call high risk is refused
+before the dispatcher is touched.
+
+*2026-08-29 · Module 42*
+
+---
+
+## MCP-023 — The chat calls the dispatcher, not the handlers
+
+**Decision.** The assistant loop builds a JSON-RPC `tools/call` and hands
+it to `handleJsonRpc()`, exactly as `/api/mcp` does. It does not look a
+tool up in the registry and invoke its handler.
+
+**Reason.** Authorization, schema validation, the confirmation gate, the
+replay ledger, input redaction, the audit row and the error mapping all
+live in the dispatcher. Calling handlers directly would have been
+shorter and would have created a second security model — and only one of
+the two would get reviewed the next time a rule changed (12B.11).
+
+It also means the chat gets every future dispatcher change for free, and
+that a tool cannot behave one way through an external MCP client and
+another way through the admin chat.
+
+**Impact.** The loop's own code is small: filter the registry for the
+actor, translate blocks to JSON-RPC and back, and stop at the
+confirmation. The tools it sees are `describeTool()`'s output — the same
+JSON Schema `tools/list` publishes — so the model is never told a shape
+the dispatcher then rejects.
+
+*2026-08-29 · Module 42*
+
+---
+
+## MCP-024 — The conversation lives in the browser
+
+**Decision.** Nothing writes a transcript. The conversation is posted up
+with each turn and handed back, and the only copy is the open tab's.
+
+**Reason.** An admin conversation quotes order values, customer names and
+production notes. Persisting it would create a second home for data that
+already has one, with its own RLS policy to get right, its own retention
+question, and its own answer to "who can read what an admin asked in
+March".
+
+The client can therefore edit the history, and that is not an
+escalation: `resolveCaller()` re-reads the actor's role and permissions
+from the database on every request, and the dispatcher re-checks each
+tool. A forged history can mislead the model about what was said; it
+cannot make a tool run that this same signed-in person could not run by
+calling `/api/mcp` directly.
+
+**Impact.** Closing the tab ends the conversation, which is the honest
+behaviour for something that was never saved. The route caps history at
+60 messages and each message at 2,000 characters, so the context cost of
+a turn stays bounded.
+
+*2026-08-29 · Module 42*
+
+---
+
+## MCP-025 — The assistant screen carries no permission of its own
+
+**Decision.** `/admin/assistant` is open to any staff account. It is not
+listed in `ADMIN_ROUTE_PERMISSIONS` and the page performs no check beyond
+the admin layout's staff gate.
+
+**Reason.** Every tool already declares the permission its data requires,
+and the dispatcher enforces it per call. A single gate on the page would
+have to be either broad — in which case it means nothing — or narrow, in
+which case it locks out staff with legitimate use of the subset they do
+hold. A production manager who can read orders should be able to ask
+about orders.
+
+What the account holds is stated on the page instead: it names how many
+of the registered tools this person can reach, computed from the same
+`visibleTo()` filter the model is given.
+
+**Impact.** The nav entry is visible to all staff, and two people with
+different roles get different assistants from the same screen — one that
+can publish products, one that cannot, without either being told the
+other exists.
+
+*2026-08-29 · Module 42*
