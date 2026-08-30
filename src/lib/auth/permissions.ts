@@ -187,6 +187,11 @@ export const ADMIN_ROUTE_PERMISSIONS: { prefix: string; permission: Permission }
   { prefix: "/admin/content", permission: "content.write" },
   { prefix: "/admin/seo", permission: "content.write" },
   { prefix: "/admin/analytics", permission: "analytics.read" },
+  // /admin/assistant itself is open to any admin (Module 42): every tool
+  // carries its own permission. Its ACTIVITY screen is not — it shows
+  // every staff account's refusals side by side, which is the same kind
+  // of operational data `system_diagnostics` is gated on (Module 43).
+  { prefix: "/admin/assistant/activity", permission: "settings.manage" },
 ];
 
 /** The permission `pathname` requires, or null when any admin role may see it. */

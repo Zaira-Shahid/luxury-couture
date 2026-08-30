@@ -357,6 +357,66 @@ outcome. Failures are recorded too.
 
 Reads write no audit row, by design and by test.
 
+**Module 43 added what that was missing.** Through Module 42 the only
+trace of a read call was the console line above, and `recordToolCall()`
+returned early for every non-write tool — so a `FORBIDDEN` on any of the
+nineteen read tools was persisted nowhere at all. The design keeps
+12B.7's rule for successes and drops it for refusals, because the two are
+different data:
+
+| | Where it goes | Why |
+|---|---|---|
+| Any call | `mcp_tool_stats`, one row per (tool, hour) | A thousand calls are one row, so this cannot grow with traffic |
+| Any failure | `mcp_tool_failures`, one row each, arguments redacted | A refusal is not bulk data; it is the event someone goes looking for |
+| A write | `audit_logs`, unchanged | "Who changed this" keeps one answer |
+
+The counter is incremented by `record_mcp_tool_call()` — one
+`on conflict do update` statement, so two calls in the same hour cannot
+both read the same count and write it plus one. It is `security definer`
+with execute revoked from `authenticated` and granted to `service_role`
+by name, following the 0058/0059 lesson that `revoke from public` also
+strips what `service_role` inherits.
+
+Neither table has an insert, update or delete policy. Both are written
+only through the service-role client, as with the confirmation ledger: a
+record of refusals that the refused party could delete records nothing.
+
+## The activity screen
+
+`/admin/assistant/activity`, gated on `settings.manage` — unlike the
+assistant itself, which any admin may open. The difference is the data:
+the chat shows you your own work, this shows every staff account's
+refusals side by side.
+
+It answers: which tools are used, what is being refused and to whom, how
+often an action stops for approval, and whether something is failing
+rather than being denied. Most rows are the system working — a marketing
+account asked for an order and was told no — and the screen says so
+rather than styling every refusal as an alarm.
+
+## The stdio transport
+
+`scripts/mcp-stdio.mjs` connects an external MCP client (a desktop app,
+say) to this server. It is a **pipe**: newline-delimited JSON-RPC on
+stdin, POSTed to `/api/mcp`, replies on stdout.
+
+It deliberately does not import the registry. Calling the dispatcher
+in-process would be faster and would be a second execution path with its
+own copy of authentication, rate limiting and audit — two security
+models, one of them reviewed. A test asserts it never grows such an
+import.
+
+```
+node --env-file=.env.local scripts/mcp-stdio.mjs --token you@example.com
+MCP_ACCESS_TOKEN=… MCP_URL=https://…/api/mcp node scripts/mcp-stdio.mjs
+```
+
+The token is a real Supabase access token, because 12B.3 made the
+endpoint session-bound. **It expires, usually within the hour, and the
+adapter does not refresh it** — refreshing means holding a refresh token,
+and a long-lived credential in a client's config file is what
+session-binding exists to avoid.
+
 Redaction (`src/lib/mcp/redact.ts`) removes values under any key matching
 password/secret/token/api key/authorization/cookie/session, truncates long
 strings, caps long arrays and caps depth.
@@ -377,6 +437,7 @@ node --env-file=.env.local scripts/test-mcp.mjs         # 127 — the foundation
 node --env-file=.env.local scripts/test-mcp-read.mjs    # 245 — the read tools
 node --env-file=.env.local scripts/test-mcp-write.mjs   # 239 — the write tools
 node --env-file=.env.local scripts/test-admin-assistant.mjs  # 84 — the admin chat
+node --env-file=.env.local scripts/test-mcp-abuse.mjs   # 59 — abuse and observability
 ```
 
 Each has the same two halves. Part A asserts invariants at the source —
@@ -398,6 +459,19 @@ exactly one must win.
 - Fifty tools: three system, fourteen read, and the write and reporting
   sets added by Modules 38-41. Every tool the roadmap specified through
   Module 41 exists.
+- Counting started with Module 43. An empty activity screen for a past
+  window is not evidence that nothing happened then.
+- The rate limiter still FAILS OPEN, and that is unchanged: a limiter
+  outage allows the request rather than refusing it. What changed is that
+  a throttled request is now recorded, so "the assistant kept saying it
+  was busy" is answerable afterwards.
+- Rate limiting remains per-actor and per-address. It throttles a runaway
+  loop and casual abuse; it is not a defence against a distributed
+  attack, and no CAPTCHA or WAF is claimed.
+- The oversized-body check reads `content-length`. A request that omits
+  the header is bounded only by the platform's own limit, so this narrows
+  the window rather than closing it.
+- The stdio adapter's token expires and is not refreshed.
 - The admin chat is untested against a live model. Everything the loop
   does with a given model output is tested with a scripted client, and
   the route is tested without one; no suite spends an API call, so

@@ -1,5 +1,6 @@
 import { permissionForAdminPath } from "@/lib/auth/permissions";
 import {
+  Activity,
   BarChart3,
   Boxes,
   Calendar,
@@ -69,6 +70,9 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
       // No permission of its own: the assistant can only do what the
       // signed-in account can, tool by tool (Module 42).
       { href: "/admin/assistant", label: "Assistant", icon: Sparkles },
+      // Gated on settings.manage through permissionForAdminPath, so it
+      // hides itself for the accounts that could not open it (Module 43).
+      { href: "/admin/assistant/activity", label: "Assistant activity", icon: Activity },
     ],
   },
   {

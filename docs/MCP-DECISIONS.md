@@ -635,3 +635,120 @@ can publish products, one that cannot, without either being told the
 other exists.
 
 *2026-08-29 · Module 42*
+
+---
+
+## MCP-026 — Successes are counted, refusals are kept
+
+**Decision.** Every tool call increments an hourly counter per tool
+(`mcp_tool_stats`). Only failures get a row of their own
+(`mcp_tool_failures`), with the redacted arguments. Successful reads are
+still not written to `audit_logs`.
+
+**Reason.** 12B.7 refused to audit reads because a row per successful
+read would be a second copy of the catalogue that nobody would query.
+That argument is right about successes and wrong about refusals: a
+`FORBIDDEN` is not bulk data, it is the one event an operator goes
+looking for, and until this module it was persisted nowhere at all —
+`recordToolCall()` returned early for every non-write tool. Splitting the
+two keeps the original reasoning intact and fixes what it was hiding.
+
+**Impact.** Volume metrics cannot grow with traffic: a thousand calls in
+an hour are one row. The failures table does grow with refusals, which is
+acceptable because a deployment producing thousands of refusals has a
+problem worth the rows.
+
+*2026-08-30 · Module 43*
+
+---
+
+## MCP-027 — The observability tables take no write policy
+
+**Decision.** Neither `mcp_tool_stats` nor `mcp_tool_failures` grants
+insert, update or delete to any role. Both are written only through the
+service-role client, and the counter's increment function is
+`security definer` with execute revoked from `authenticated` and granted
+to `service_role` by name.
+
+**Reason.** The same argument as the confirmation ledger in 0063: a
+record of refusals that the refused party could delete is not a record.
+And a counter any signed-in caller could increment is not a metric. The
+explicit `service_role` grant follows 0058/0059, where `revoke from
+public` also stripped the grant `service_role` inherited and broke the
+one caller that was supposed to run the function.
+
+**Impact.** The MCP path now reaches the service-role client from a
+fourth place, alongside the audit write, the rate limiter and the replay
+ledger. Recorded here rather than left to be discovered. None of the four
+takes AI-supplied input as a table or column name.
+
+*2026-08-30 · Module 43*
+
+---
+
+## MCP-028 — The stdio transport is a proxy, not a second server
+
+**Decision.** `scripts/mcp-stdio.mjs` forwards JSON-RPC to `/api/mcp`
+over HTTP. It does not import the registry or the dispatcher, and a test
+asserts that it never starts to.
+
+**Reason.** An in-process adapter would be faster and would duplicate
+authentication, rate limiting and audit into a second execution path.
+Module 42 made the same call for the admin chat and for the same reason:
+two security models mean one of them is the one nobody reviewed.
+
+**Impact.** Every external call pays an HTTP hop and is subject to the
+same per-actor rate limit as the browser. The adapter needs a real access
+token, which expires within the hour and is not refreshed — a real
+limitation, and the price of 12B.3's decision that there is no MCP
+credential.
+
+*2026-08-30 · Module 43*
+
+---
+
+## MCP-029 — claude.ai Connectors need OAuth, so the stdio adapter is the route for now
+
+**Decision.** This server will not be added to claude.ai as a custom
+connector yet. Staff who want the tools in a Claude client use
+`scripts/mcp-stdio.mjs` from Claude Desktop or Claude Code, on their own
+subscription. An OAuth 2.1 authorization server is deferred to its own
+module, scheduled after Module 32 deploys the site.
+
+**Reason.** claude.ai's custom-connector dialog accepts a URL and,
+optionally, an OAuth client id and secret. There is no field for a static
+bearer token, so a server whose only credential is
+`Authorization: Bearer <token>` can be added only as an UNAUTHENTICATED
+connector — which for an endpoint reaching orders, customers and payments
+is not a trade worth making.
+
+The transport is not the obstacle: Streamable HTTP requires POST and only
+optionally GET-for-SSE, and `/api/mcp` already answers POST with JSON and
+405s GET with an `allow` header. What is missing is the whole handshake —
+`WWW-Authenticate` carrying `resource_metadata`, protected-resource and
+authorization-server metadata documents, an authorize endpoint with a
+consent screen, a token endpoint with PKCE, refresh, revocation, and
+either dynamic client registration or the Client ID Metadata Documents
+that the 2026-07-28 spec revision prefers.
+
+The part that is not boilerplate is `ctx.supabase`. Every tool queries as
+the caller so RLS applies underneath the permission check (12B.2); a
+token this server minted is not a Supabase JWT, so the token endpoint
+would have to hold each user's Supabase refresh token and exchange it per
+call — with its own storage, its own RLS, and a failure path that refuses
+rather than falling back to the service-role client. Reaching for
+service-role with an actor filter instead would delete the second
+barrier, which is the reason the first one is trustworthy.
+
+**Impact.** 12B.3's "there is no MCP credential and no second user store"
+stands until that module is built, and building it AMENDS that decision
+rather than extending it — an OAuth token is both. Deployment is a hard
+prerequisite either way: Anthropic connects from its own cloud ranges, so
+a connector cannot reach a localhost URL, and Module 32 has not run.
+
+One known rough edge of the interim route, recorded so it is not
+rediscovered: the adapter's access token expires within the hour and is
+not refreshed. Teaching it to hold a refresh token is small, and it is
+the same session-exchange machinery the OAuth module will need.
+
+*2026-08-30 · Module 43*

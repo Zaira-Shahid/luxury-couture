@@ -8,6 +8,7 @@ import {
   parseJsonRpcRequest,
   type JsonRpcResponse,
 } from "@/lib/mcp/protocol";
+import { recordRateLimited } from "@/lib/mcp/metrics";
 import { handleJsonRpc } from "@/lib/mcp/server";
 import { toolRegistry } from "@/lib/mcp/tools";
 import { checkRateLimit } from "@/lib/security/rate-limit";
@@ -21,6 +22,7 @@ import { checkRateLimit } from "@/lib/security/rate-limit";
  * would reimplement only this file.
  *
  * ORDER OF OPERATIONS, following the precedent set by /api/chat:
+ *   0. REFUSE AN OVERSIZED BODY — before it is read into memory
  *   1. parse
  *   2. AUTHENTICATE — before anything reads the database
  *   3. RATE LIMIT — per actor, before dispatch
@@ -38,6 +40,23 @@ export const dynamic = "force-dynamic";
 /** One assistant conversation is a handful of calls; 60 per 10 minutes is generous for a human and cheap to exceed for a loop. */
 const RATE_LIMIT = 60;
 
+/**
+ * The largest JSON-RPC request this endpoint will read (Module 43).
+ *
+ * Every legitimate call is a tool name and a handful of scalar
+ * arguments — kilobytes at the outside. Without a cap, `request.json()`
+ * buffers whatever arrives before any of our own validation runs, so a
+ * single authenticated caller could hand a serverless function a
+ * multi-megabyte body and make it pay to parse it. The schemas would
+ * reject the contents afterwards, which is too late to matter.
+ *
+ * Checked against `content-length` rather than by measuring the stream:
+ * the point is to refuse BEFORE reading. A request that omits the header
+ * is still bounded by the platform's own body limit, so this narrows the
+ * window rather than closing it, and says so instead of claiming more.
+ */
+const MAX_BODY_BYTES = 128 * 1024;
+
 function jsonResponse(body: JsonRpcResponse | null, status = 200) {
   // A JSON-RPC notification produces no body at all. 202 is the correct
   // answer over HTTP: accepted, nothing to say.
@@ -46,6 +65,15 @@ function jsonResponse(body: JsonRpcResponse | null, status = 200) {
 }
 
 export async function POST(request: NextRequest) {
+  // 0. Size. A 413 is the honest answer and it costs nothing to give.
+  const declaredLength = Number(request.headers.get("content-length") ?? 0);
+  if (declaredLength > MAX_BODY_BYTES) {
+    return jsonResponse(
+      jsonRpcFailure(null, JSON_RPC.INVALID_REQUEST, "That request is too large."),
+      413
+    );
+  }
+
   // 1. Parse.
   let payload: unknown;
   try {
@@ -101,6 +129,17 @@ export async function POST(request: NextRequest) {
     caller.actor.id
   );
   if (!limit.allowed) {
+    // Recorded, not just returned (Module 43). A 429 used to leave no
+    // trace at all, which made "the assistant kept telling me it was
+    // busy" an unanswerable complaint. The subject is the tool that was
+    // being asked for, so a throttled loop is visible as a loop against
+    // one tool rather than as an anonymous count.
+    const subject =
+      rpcRequest.method === "tools/call" && typeof rpcRequest.params?.name === "string"
+        ? rpcRequest.params.name
+        : rpcRequest.method;
+    await recordRateLimited({ subject, actor: caller.actor });
+
     return jsonResponse(jsonRpcFailure(id, JSON_RPC.INTERNAL_ERROR, limit.message, { code: "RATE_LIMITED" }), 429);
   }
 
