@@ -704,3 +704,51 @@ limitation, and the price of 12B.3's decision that there is no MCP
 credential.
 
 *2026-08-30 · Module 43*
+
+---
+
+## MCP-029 — claude.ai Connectors need OAuth, so the stdio adapter is the route for now
+
+**Decision.** This server will not be added to claude.ai as a custom
+connector yet. Staff who want the tools in a Claude client use
+`scripts/mcp-stdio.mjs` from Claude Desktop or Claude Code, on their own
+subscription. An OAuth 2.1 authorization server is deferred to its own
+module, scheduled after Module 32 deploys the site.
+
+**Reason.** claude.ai's custom-connector dialog accepts a URL and,
+optionally, an OAuth client id and secret. There is no field for a static
+bearer token, so a server whose only credential is
+`Authorization: Bearer <token>` can be added only as an UNAUTHENTICATED
+connector — which for an endpoint reaching orders, customers and payments
+is not a trade worth making.
+
+The transport is not the obstacle: Streamable HTTP requires POST and only
+optionally GET-for-SSE, and `/api/mcp` already answers POST with JSON and
+405s GET with an `allow` header. What is missing is the whole handshake —
+`WWW-Authenticate` carrying `resource_metadata`, protected-resource and
+authorization-server metadata documents, an authorize endpoint with a
+consent screen, a token endpoint with PKCE, refresh, revocation, and
+either dynamic client registration or the Client ID Metadata Documents
+that the 2026-07-28 spec revision prefers.
+
+The part that is not boilerplate is `ctx.supabase`. Every tool queries as
+the caller so RLS applies underneath the permission check (12B.2); a
+token this server minted is not a Supabase JWT, so the token endpoint
+would have to hold each user's Supabase refresh token and exchange it per
+call — with its own storage, its own RLS, and a failure path that refuses
+rather than falling back to the service-role client. Reaching for
+service-role with an actor filter instead would delete the second
+barrier, which is the reason the first one is trustworthy.
+
+**Impact.** 12B.3's "there is no MCP credential and no second user store"
+stands until that module is built, and building it AMENDS that decision
+rather than extending it — an OAuth token is both. Deployment is a hard
+prerequisite either way: Anthropic connects from its own cloud ranges, so
+a connector cannot reach a localhost URL, and Module 32 has not run.
+
+One known rough edge of the interim route, recorded so it is not
+rediscovered: the adapter's access token expires within the hour and is
+not refreshed. Teaching it to hold a refresh token is small, and it is
+the same session-exchange machinery the OAuth module will need.
+
+*2026-08-30 · Module 43*

@@ -4148,6 +4148,17 @@ Outstanding, in two independent tracks:
   MCP CUSTOMER SELF-SERVICE READ TOOLS` (not started) is unblocked, since
   Module 37 is complete and its read-tool patterns exist to reuse.
 
+  A further MCP module is now scheduled but not numbered: an OAuth 2.1
+  authorization server, so this deployment can be added to claude.ai as a
+  custom connector. Decided on 30 August 2026 after checking what that
+  feature actually requires — the connector dialog takes a URL and an
+  optional OAuth client id and secret, and has no field for a bearer
+  token, so the endpoint as built could only be added unauthenticated.
+  It is scheduled AFTER Module 32, because a connector cannot reach a
+  localhost URL. Until then, staff reach the tools through
+  `scripts/mcp-stdio.mjs` in Claude Desktop or Claude Code. The reasoning,
+  including why it amends 12B.3 rather than extending it, is MCP-029.
+
   Module 44 inherits one thing from 43 that its own section does not
   mention: the registry has NO `audience` field. 12B.4 says "every tool
   declares an audience" and that has never been true in code — every tool
