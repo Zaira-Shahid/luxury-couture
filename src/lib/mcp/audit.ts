@@ -2,6 +2,7 @@ import { logger } from "@/lib/logger";
 import { logAudit } from "@/lib/security/audit";
 
 import type { McpActor } from "./context";
+import { recordToolMetrics } from "./metrics";
 import { redactInput } from "./redact";
 import type { AnyToolDefinition, ToolTarget } from "./registry";
 
@@ -16,10 +17,16 @@ import type { AnyToolDefinition, ToolTarget } from "./registry";
  * two tables would mean two half-answers and a join nobody remembers to
  * write.
  *
- * READS ARE NOT AUDITED to the database. They are recorded in the
- * application log with the actor and the tool, which is enough to spot an
- * assistant looping, while a database row per read would be a second copy
- * of the catalogue that nobody would ever query.
+ * READS ARE NOT AUDITED to the database, and that is unchanged: no
+ * `audit_logs` row is written for a read, because a row per successful
+ * read would be a second copy of the catalogue that nobody would query.
+ *
+ * WHAT MODULE 43 ADDED ALONGSIDE IT. Reads are now COUNTED (an hourly
+ * bucket per tool) and every FAILURE — read or write — is persisted with
+ * its redacted arguments. See metrics.ts: the 12B.7 argument holds for
+ * successes and collapses for refusals, which are the one event an
+ * operator actually goes looking for and which this file used to drop on
+ * the floor for every non-write tool.
  *
  * FAILURES ARE AUDITED TOO. A log containing only successes cannot answer
  * "what did it try to do", which is the question asked after an incident.
@@ -61,6 +68,12 @@ export async function recordToolCall(params: {
     status: outcome.status,
     durationMs,
   });
+
+  // Module 43: metrics for EVERY call, read and write alike, and a
+  // persisted row for every failure. This runs before the early return
+  // below, which is the bug it fixes: until this module, a refusal on a
+  // read tool was recorded nowhere a person could later look.
+  await recordToolMetrics(params);
 
   if (tool.kind !== "write") return;
 
