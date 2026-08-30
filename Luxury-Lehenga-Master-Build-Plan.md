@@ -2426,6 +2426,16 @@ beyond the identifiers already present in the entity columns.
 
 Audit writes never throw, per the existing helper's contract.
 
+**Observability, added in Module 43.** Reads are still not written to
+`audit_logs`. What changed is that every call — read or write — now
+increments an hourly counter per tool in `mcp_tool_stats`, and every
+FAILURE gets a row in `mcp_tool_failures` with its redacted arguments.
+The original rule was right about successes (a row per read would be a
+second copy of the catalogue) and wrong about refusals, which are the one
+event an operator goes looking for and which were persisted nowhere at
+all until this module. Both tables are service-role write only and
+`settings.manage` read; `/admin/assistant/activity` is the screen.
+
 ## 12B.8 Error model
 
 Tools return controlled errors from a fixed set, with a message safe to
@@ -2667,9 +2677,18 @@ weight, as in Module 26.
   services now return the previous status because they read it anyway.
   A general before/after diff is still not implemented.
 - The endpoint is session-bound, so an external MCP client must supply a
-  real user access token. No stdio transport (see 12B.3).
+  real user access token (12B.3). CLOSED IN MODULE 43 as far as transport
+  goes: `scripts/mcp-stdio.mjs` is a stdio adapter, but it is a PROXY to
+  the HTTP endpoint rather than a second in-process transport, and the
+  token it carries expires within the hour and is not refreshed.
 - Rate limiting is per-actor and table-backed; it throttles a runaway loop,
-  it is not a defence against a distributed attack.
+  it is not a defence against a distributed attack. Unchanged in Module
+  43, which recorded the refusals rather than strengthening the limit —
+  and the limiter still FAILS OPEN if its own table is unreachable.
+- Counting started with Module 43. An empty activity screen for a window
+  before that date is not evidence that nothing happened in it.
+- The oversized-body check reads `content-length`; a request that omits
+  the header is bounded only by the platform's own limit.
 
 ## 12B.15 Not permitted, permanently
 
@@ -3165,11 +3184,53 @@ usability measure, and the dispatcher refuses a hidden tool anyway.
 
 # MODULE 43 — MCP PRODUCTION HARDENING & OBSERVABILITY
 
-Status: [ ] NOT STARTED
+Status: [x] COMPLETE (30 August 2026)
 
 Tool-call metrics, authorization-failure visibility in Admin, an MCP section
-in the security audit, load and abuse testing, and — if wanted — a stdio
-adapter over the same registry for external Claude clients.
+in the security audit, load and abuse testing, and a stdio adapter for
+external MCP clients.
+
+A FIFTH WRONG PREMISE, and this one was load-bearing. This section
+described the work as adding VISIBILITY to data that existed. It did not
+exist. `recordToolCall()` returned early for every non-write tool, so an
+authorization refusal on any of the nineteen read tools was persisted
+nowhere at all — and no admin screen has ever read `audit_logs`, which
+has been written to since Module 29. The module therefore had to CREATE
+the record before it could show it.
+
+What was built:
+
+- `0065_mcp_observability.sql` — `mcp_tool_stats` (one row per tool per
+  hour, incremented by an `on conflict` RPC so concurrent calls cannot
+  lose an increment) and `mcp_tool_failures` (one row per refusal, with
+  redacted arguments). Neither table takes an insert, update or delete
+  policy; both are read-gated on `settings.manage`. See MCP-026, MCP-027.
+- `src/lib/mcp/metrics.ts`, called from `recordToolCall()` BEFORE the
+  write-only early return, and never able to throw.
+- `/admin/assistant/activity`, gated on `settings.manage` rather than on
+  "any admin", because it shows every staff account's refusals side by
+  side.
+- A body-size refusal on `/api/mcp` before the body is parsed, and a
+  recorded event for every rate-limited request — a 429 previously left
+  no trace at all.
+- `scripts/mcp-stdio.mjs`, a PROXY to `/api/mcp` rather than a second
+  in-process transport (MCP-028), with a `--token` helper.
+- `scripts/test-mcp-abuse.mjs` — 59 checks that ask the endpoint
+  improperly and then assert that the refusal was written down.
+- `docs/SECURITY.md` gained the MCP section it never had; the audit
+  predates the whole track by seven modules.
+
+The 12B.7 rule "reads are not audited" is kept, not reversed: successes
+are counted, refusals are kept. A thousand calls in an hour remain one
+row, so nothing here grows with traffic.
+
+What this module did NOT close, stated rather than implied: the rate
+limiter still fails open on its own failure and is still not a defence
+against a distributed attack; the body cap reads `content-length`, so a
+request omitting the header is bounded only by the platform limit; the
+stdio adapter's access token expires within the hour and is not
+refreshed; and the assistant has still never run against a live model on
+this deployment.
 
 # MODULE 44 — MCP CUSTOMER SELF-SERVICE READ TOOLS
 
@@ -4083,9 +4144,16 @@ Outstanding, in two independent tracks:
 - Deployment track: `MODULE 32 — PRODUCTION DEPLOYMENT` (not started),
   then `MODULE 33 — PRODUCTION READINESS & HANDOVER`.
 - MCP track (Phase 6, see section 12B/12C): `MODULE 43 — MCP PRODUCTION
-  HARDENING & OBSERVABILITY` (not started). `MODULE 44 — MCP CUSTOMER
-  SELF-SERVICE READ TOOLS` (not started) is unblocked, since Module 37 is
-  complete and its read-tool patterns exist to reuse.
+  HARDENING & OBSERVABILITY` is COMPLETE (30 August 2026). `MODULE 44 —
+  MCP CUSTOMER SELF-SERVICE READ TOOLS` (not started) is unblocked, since
+  Module 37 is complete and its read-tool patterns exist to reuse.
+
+  Module 44 inherits one thing from 43 that its own section does not
+  mention: the registry has NO `audience` field. 12B.4 says "every tool
+  declares an audience" and that has never been true in code — every tool
+  is admin-audience by construction, not by declaration. Adding the field,
+  and the `visibleTo()` filtering that goes with it, is 44's first job and
+  not a detail.
 
 Module 42 was the first module in this track with a user interface and
 the first to consume the registry rather than add to it. Its one

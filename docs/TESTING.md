@@ -104,6 +104,28 @@ The rest is the negative half: a customer refused, an anonymous request refused,
 message refused before the model is reached, a malformed approval not treated as an approval,
 and a model that never stops ending the turn as a failure rather than as an answer.
 
+`test-mcp-abuse.mjs` (Module 43) is the seventh, and the only one that asks the endpoint
+IMPROPERLY on purpose: anonymous, with a forged bearer token, from a customer account, as a
+batch, as malformed JSON, with an unknown method, with an unknown tool name, with a megabyte of
+padding, with two hundred levels of nesting, and with a SQL-shaped id.
+
+Asserting the refusal is only half of it. The other half is that the refusal was WRITTEN DOWN —
+which is the change Module 43 makes, since a `FORBIDDEN` on a read tool used to be persisted
+nowhere at all. So each probe is followed by a service-role read of `mcp_tool_failures` asserting
+the row exists, names the role that was refused, and carries the arguments that caused it; and
+three successful pings are followed by a read of `mcp_tool_stats` asserting the counter moved and
+that three calls did not become three rows.
+
+The rate-limit probe gets its own account, because it deliberately exhausts a window and would
+otherwise throttle every check after it. The load pass is PRINTED, not asserted: ten concurrent
+calls with p50/p95, so a change that makes every call five times slower is visible, without a
+threshold tuned on one laptop failing on someone else's.
+
+It also drives `scripts/mcp-stdio.mjs` end to end — a real `tools/list` through the pipe, plus a
+notification that must produce no output at all — and asserts by reading the source that the
+adapter never grows a registry import, since that is the line between a proxy and a second
+security model.
+
 **Most of it is negative, and that is the design.** The checks that matter are: an anonymous
 caller refused, a customer refused, a production account refused a tool it was never shown
 (hiding a tool is not the enforcement), twelve shapes of `execute_sql`/`shell`/`read_file`

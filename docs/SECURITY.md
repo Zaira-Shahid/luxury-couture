@@ -133,6 +133,57 @@ Worth recording, because a security tool that cries wolf trains you to skim past
    unauthorised caller is refused, and that the reaper deletes the right rows and keeps the wrong
    ones.
 
+## MCP and the assistant (Module 43)
+
+This audit predates the MCP track by seven modules and had nothing to say
+about it. What follows is the boundary as built, and `test-mcp-abuse.mjs`
+asserts each claim rather than describing it.
+
+**There is no MCP credential.** No API key, no service account, no second
+user store. A caller presents the application's own Supabase session —
+the auth cookie from a browser, or a Bearer access token from an external
+client — and the role is read from `profiles` server-side on every
+request. Nothing about the caller's identity is taken from the request
+body, so an assistant cannot name a person and be believed.
+
+**Three checks in this order, on every call:** authenticated, then an
+admin role, then the tool's own permission read from `role_permissions`
+in the database. Order matters — a caller with no right to a tool learns
+that and nothing about the tool's arguments. Underneath all of it every
+handler queries with the CALLER'S client, so RLS refuses independently of
+whether the application layer got it right.
+
+**The AI never gets a query builder.** No `execute_sql`, no tool that
+takes a table name, no filesystem, no shell, no arbitrary HTTP (12B.15).
+The registry is the list of what can happen, and the dispatcher can only
+reach a name that is in it.
+
+**High-risk actions do not execute on the first call.** They describe
+what they would do and return a signed token, which the dispatcher spends
+against a ledger BEFORE acting, so two concurrent calls carrying one
+token cannot both win. In the admin chat the model never holds that
+token at all: the loop stops, a person clicks Approve, and the server
+supplies a fresh token that never crosses the network.
+
+**What reaches the logs is redacted.** Values under keys matching
+password/secret/token/api-key/authorization/cookie/session are dropped
+before an audit or failure row is written, long strings truncated, depth
+capped. Redaction is by key name, never by guessing what a secret looks
+like.
+
+**Refusals are now persisted.** Until Module 43 an authorization failure
+on a read tool existed only as a console line. It is now a row with the
+actor, the tool, the code and the redacted arguments, readable at
+`/admin/assistant/activity` by `settings.manage`, on a table with no
+insert, update or delete policy for anyone.
+
+**Known weak points, stated rather than implied.** The rate limiter fails
+open on its own failure; it counts per actor and per address, so it is
+not a defence against a distributed attack. The body-size check reads
+`content-length`, so a request omitting the header is bounded only by the
+platform limit. The stdio adapter's token expires and is not refreshed.
+The assistant has never been run against a live model on this deployment.
+
 ## Known limitations
 
 - **End-to-end price integrity is not proven.** Driving `placeOrder` from a script needs the cart

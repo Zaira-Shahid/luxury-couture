@@ -299,7 +299,7 @@ src/
     (storefront)/    public site — home, catalogue, builder, cart, checkout, blog
     (auth)/          sign in, register, password reset, callback
     (account)/       customer dashboard — orders, measurements, wishlist, notifications
-    (admin)/         59 admin screens, including the AI assistant
+    (admin)/         60 admin screens, including the AI assistant and its activity log
     api/             chat, MCP, the admin assistant, webhooks, cron
   components/
     ui/              shadcn primitives on Base UI
@@ -311,11 +311,11 @@ src/
     supabase/        browser, server and middleware clients
     auth/            session, roles, permissions
     ai/              provider interface, guardrails, query intent
-    mcp/             MCP server, tool registry, authorization, audit, admin chat loop
+    mcp/             MCP server, tool registry, authorization, audit, metrics, admin chat loop
     validations/     Zod schemas for every Server Action
 docs/                fourteen documents, one per subsystem
-scripts/             migration runner, 48 test scripts, seeders, verifiers
-supabase/migrations/ 62 SQL migrations, applied in filename order
+scripts/             migration runner, 49 test scripts, the stdio MCP adapter, seeders, verifiers
+supabase/migrations/ 65 SQL migrations, applied in filename order
 ```
 
 ---
