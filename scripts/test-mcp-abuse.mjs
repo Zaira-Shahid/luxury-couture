@@ -290,6 +290,44 @@ check(
   !(await failuresFor(actors.super_admin.id)).some((row) => row.tool_name === "orders_drop_table")
 );
 
+// ---- The screen that shows it ----------------------------------------
+console.log("\n## The activity screen's own gate");
+
+/** Matches @supabase/ssr's cookie format — the same helper the other MCP suites use. */
+function sessionCookie(session) {
+  const ref = new URL(url).hostname.split(".")[0];
+  return `sb-${ref}-auth-token=base64-${Buffer.from(JSON.stringify(session), "utf8").toString("base64url")}`;
+}
+
+async function page(who, path) {
+  const headers = who ? { cookie: sessionCookie(who.session) } : {};
+  const res = await fetch(APP_URL + path, { headers, redirect: "manual" });
+  return { status: res.status, location: res.headers.get("location"), text: await res.text() };
+}
+
+const activityAsAdmin = await page(actors.super_admin, "/admin/assistant/activity");
+check("settings.manage opens the activity screen", activityAsAdmin.status === 200);
+check("the screen renders its own heading", activityAsAdmin.text.includes("Assistant activity"));
+
+// The gate is the middleware reading ADMIN_ROUTE_PERMISSIONS, not the
+// page: a screen that checked for itself would be one more place for the
+// sidebar and the route to disagree.
+const activityAsMarketing = await page(actors.marketing, "/admin/assistant/activity");
+check(
+  "an account without settings.manage is refused the activity screen",
+  activityAsMarketing.status >= 300 && activityAsMarketing.status < 400
+);
+check(
+  "the refused account keeps the assistant itself",
+  (await page(actors.marketing, "/admin/assistant")).status === 200
+);
+
+const activityAnon = await page(null, "/admin/assistant/activity");
+check(
+  "an anonymous visitor is sent away from the activity screen",
+  activityAnon.status >= 300 && activityAnon.status < 400
+);
+
 // ---- Successes are counted, not stored -------------------------------
 console.log("\n## Successes are counted, not stored");
 
